@@ -7,6 +7,9 @@ sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ Build by Roc')/g" feeds/luci/modu
 mkdir -p feeds/packages/net/vlmcsd/patches
 cp -f $GITHUB_WORKSPACE/patches/fix_vlmcsd_compile_with_ccache.patch feeds/packages/net/vlmcsd/patches
 
+# 开启NSS全部功能
+cp -f $GITHUB_WORKSPACE/patches/Makefile target/linux/qualcommax/Makefile
+
 # 移除要替换的包
 rm -rf feeds/packages/net/alist
 rm -rf feeds/luci/applications/luci-app-alist
