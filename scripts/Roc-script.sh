@@ -1,7 +1,13 @@
 # 修改默认IP & 固件名称 & 编译署名
-sed -i 's/192.168.1.1/192.168.2.1/g' package/base-files/files/bin/config_generate
+sed -i 's/192.168.1.1/192.168.233.1/g' package/base-files/files/bin/config_generate
 sed -i "s/hostname='.*'/hostname='Roc'/g" package/base-files/files/bin/config_generate
 sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ Build by Roc')/g" feeds/luci/modules/luci-mod-status/htdocs/luci-static/resources/view/status/include/10_system.js
+
+# 更改默认 Shell 为 zsh
+sed -i 's/\/bin\/ash/\/usr\/bin\/zsh/g' package/base-files/files/etc/passwd
+
+# TTYD 免登录
+sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.config
 
 # 修正使用ccache编译vlmcsd的问题
 mkdir -p feeds/packages/net/vlmcsd/patches
@@ -40,6 +46,23 @@ git clone --depth=1 https://github.com/destan19/OpenAppFilter.git package/OpenAp
 git clone --depth=1 https://github.com/lwb1978/openwrt-gecoosac package/openwrt-gecoosac
 git clone --depth=1 https://github.com/NONGFAH/luci-app-athena-led package/luci-app-athena-led
 chmod +x package/luci-app-athena-led/root/etc/init.d/athena_led package/luci-app-athena-led/root/usr/sbin/athena-led
+
+# tailscale
+git clone --depth=1 https://github.com/asvow/luci-app-tailscale package/luci-app-tailscale
+sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' feeds/packages/net/tailscale/Makefile
+
+# 多服务器的frpc
+git clone --depth=1 https://github.com/justice2001/luci-app-multi-frpc package/luci-app-multi-frpc
+
+# 在线用户
+git_sparse_clone main https://github.com/haiibo/packages luci-app-onliner
+sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/lean/default-settings/files/zzz-default-settings
+sed -i '$i uci commit nlbwmon' package/lean/default-settings/files/zzz-default-settings
+chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
+
+# turboacc
+curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
+
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
