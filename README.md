@@ -19,3 +19,6 @@
 4. 如需修改默认 IP、添加或删除插件包以及一些其他设置请在 `Roc-script.sh` 文件内修改
 5. 添加或修改 `xx.yml` 文件，最后点击 `Actions` 运行要编译的 `workflow` 即可开始编译
 6. 编译大概需要1-2小时，编译完成后在仓库主页 [Releases](https://github.com/laipeng668/openwrt-ci-roc/releases) 对应 Tag 标签内下载固件
+
+## 软件包查询
+[恩山-Openwrt软件包全量解释](https://www.right.com.cn/FORUM/thread-8384897-1-1.html)
