@@ -21,7 +21,6 @@ DEFAULT_PACKAGES += \
 	kmod-qca-nss-drv-eogremgr \
 	kmod-qca-nss-drv-gre \
 	kmod-qca-nss-drv-igs \
-	kmod-qca-nss-drv-l2tpv2 \
 	kmod-qca-nss-drv-lag-mgr \
 	kmod-qca-nss-drv-map-t \
 	kmod-qca-nss-drv-match \
@@ -34,5 +33,6 @@ DEFAULT_PACKAGES += \
 	kmod-qca-nss-drv-vlan-mgr \
 	kmod-qca-nss-drv-vxlanmgr \
 	kmod-qca-nss-drv-wifi-meshmgr \
+	# kmod-qca-nss-drv-l2tpv2 \
 
 $(eval $(call BuildTarget))
