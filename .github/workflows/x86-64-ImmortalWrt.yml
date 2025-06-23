@@ -12,6 +12,7 @@ env:
   CONFIG_FILE: configs/x86-64.config
   DIY_SCRIPT: scripts/Roc-script.sh
   CLASH_KERNEL: amd64
+  MADS: false
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
   FIRMWARE_TAG: x86-64
@@ -37,6 +38,7 @@ jobs:
         echo "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l)" && df -hT
 
     - name: Maximize Available Disk Space(最大化可用磁盘空间​)
+      if: env.MADS == 'true'
       uses: AdityaGarg8/remove-unwanted-software@master
       with:
         remove-dotnet: "true"
@@ -65,8 +67,10 @@ jobs:
     - name: Clone Source Code(克隆源代码)
       run: |
         df -hT $GITHUB_WORKSPACE
-        git clone --depth 1 -b $REPO_BRANCH --single-branch $REPO_URL openwrt
-        cd openwrt
+        sudo mkdir -p /mnt/openwrt
+        sudo chown -R $(id -u):$(id -g) /mnt/openwrt
+        git clone --depth 1 -b $REPO_BRANCH --single-branch $REPO_URL /mnt/openwrt
+        cd /mnt/openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
         VERSION_INFO=$(git show -s --date=short --format="作者: %an<br/>时间: %cd<br/>内容: %s<br/>hash: %H")
         echo "VERSION_INFO=$VERSION_INFO" >> $GITHUB_ENV
@@ -174,13 +178,13 @@ jobs:
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
           **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }}**
-          ### 📒 固件信息(无WIFI)
-          - 这是基于ImmortalWrt主线制作的个人定制固件，默认主题为Argon；该固件在ImmortalWrt的基础上，添加了额外的软件包cpufreq、ddns、ttyd、upnp、wol、samba4、vlmcsd、aria2、autoreboot、uhttpd、frps、frpc、diskman、hd-idle、banip、acme、arpbind、usb-printer、homeproxy、alist、adguardhome、filebrowser、dockerman、gecoosac、lucky、oaf、sqm，并添加了若干工具，具体详见x86-64.config。
+          ### 📒 固件信息
+          - 这是基于ImmortalWrt主线制作的个人定制固件，默认主题为Argon；该固件在ImmortalWrt的基础上，添加了额外的软件包cpufreq、ddns、ttyd、upnp、wolplus、samba4、vlmcsd、aria2、autoreboot、uhttpd、frps、frpc、diskman、hd-idle、banip、acme、arpbind、usb-printer、homeproxy、openlist、adguardhome、filebrowser、dockerman、gecoosac、lucky、oaf、sqm，并添加了若干工具，具体详见x86-64.config。
           - 💻 这是 ${{ env.FIRMWARE_TAG }} 平台使用的 OpenWrt 固件
           - ⚽ 固件源码: ${{ env.REPO_URL }}
           - 💝 源码分支: ${{ env.REPO_BRANCH }}
           - 🌐 默认地址: **192.168.2.1**
-          - 🔑 默认密码: 无
+          - 🔑 默认密码: none
           ### 🧊 固件版本
           - 固件内核版本：**${{ env.VERSION_KERNEL }}**
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录

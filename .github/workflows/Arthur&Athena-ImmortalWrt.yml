@@ -1,4 +1,4 @@
-name: Arthur&Athena-LibWrt
+name: Arthur&Athena-ImmortalWrt
 
 on:
   workflow_dispatch:
@@ -7,14 +7,15 @@ on:
   #   - cron: 0 20 * * *
 
 env:
-  REPO_URL: https://github.com/laipeng668/openwrt-roc.git
-  REPO_BRANCH: k6.12-nss
+  REPO_URL: https://github.com/laipeng668/immortalwrt.git
+  REPO_BRANCH: master
   CONFIG_FILE: configs/Arthur&Athena.config
   DIY_SCRIPT: scripts/Roc-script.sh
   CLASH_KERNEL: amd64
+  MADS: false
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
-  FIRMWARE_TAG: Arthur&Athena
+  FIRMWARE_TAG: Arthur&Athena&Taiyi
   TZ: Asia/Shanghai
 
 jobs:
@@ -37,6 +38,7 @@ jobs:
         echo "硬盘数量：$(ls /dev/sd* | grep -v [1-9] | wc -l)" && df -hT
 
     - name: Maximize Available Disk Space(最大化可用磁盘空间​)
+      if: env.MADS == 'true'
       uses: AdityaGarg8/remove-unwanted-software@master
       with:
         remove-dotnet: "true"
@@ -65,8 +67,10 @@ jobs:
     - name: Clone Source Code(克隆源代码)
       run: |
         df -hT $GITHUB_WORKSPACE
-        git clone --depth 1 -b $REPO_BRANCH --single-branch $REPO_URL openwrt
-        cd openwrt
+        sudo mkdir -p /mnt/openwrt
+        sudo chown -R $(id -u):$(id -g) /mnt/openwrt
+        git clone --depth 1 -b $REPO_BRANCH --single-branch $REPO_URL /mnt/openwrt
+        cd /mnt/openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
         VERSION_INFO=$(git show -s --date=short --format="作者: %an<br/>时间: %cd<br/>内容: %s<br/>hash: %H")
         echo "VERSION_INFO=$VERSION_INFO" >> $GITHUB_ENV
@@ -150,9 +154,11 @@ jobs:
       if: steps.compile.outputs.status == 'success'
       run: |
         cd $OPENWRT_PATH/bin/targets/*/*
-        cp $OPENWRT_PATH/.config build.config
+        cp $OPENWRT_PATH/.config Arthur.Athena.config
+        mv config.buildinfo Arthur.Athena.config.buildinfo
+        mv immortalwrt-qualcommax-ipq60xx.manifest immortalwrt-qualcommax-ipq60xx-Arthur.Athena.manifest
         mv -f $OPENWRT_PATH/bin/packages/*/*/*.apk packages
-        tar -zcf Packages.tar.gz packages
+        tar -zcf Arthur.Athena.Packages.tar.gz packages
         rm -rf packages feeds.buildinfo version.buildinfo sha256sums profiles.json
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
@@ -174,13 +180,15 @@ jobs:
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
           **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }}**
-          ### 📒 固件信息(带WIFI)
-          - 这是带WIFI以及NSS的6.12内核固件，默认主题为Argon；该固件在LibWrt的基础上，添加了额外的软件包cpufreq、ddns、ttyd、upnp、wol、samba4、vlmcsd、aria2、autoreboot、uhttpd、wifischedule、frps、frpc、diskman、hd-idle、banip、acme、arpbind、usb-printer、homeproxy、alist、adguardhome、oaf、sqm，并添加了若干工具，具体详见Arthur&Athena.config。
+          ### 📒 固件信息
+          - 这是开启全功能NSS的6.12内核固件，默认主题为Argon；该固件在ImmortalWrt的基础上，添加了额外的软件包cpufreq、ddns、ttyd、upnp、wolplus、samba4、vlmcsd、aria2、autoreboot、uhttpd、wifischedule、frps、frpc、diskman、hd-idle、banip、acme、arpbind、usb-printer、homeproxy、openlist、adguardhome、oaf、sqm（**Taiyi**额外增加了filebrowser、dockerman、gecoosac、lucky），并添加了若干工具，具体详见对应机型的config。
           - 💻 这是 ${{ env.FIRMWARE_TAG }} 平台使用的 OpenWrt 固件
           - ⚽ 固件源码: ${{ env.REPO_URL }}
           - 💝 源码分支: ${{ env.REPO_BRANCH }}
           - 🌐 默认地址: **192.168.2.1**
-          - 🔑 默认密码: 无
+          - 🔑 默认密码: none
+          - 🚀 WiFi名称: **Star**
+          - 🔑 WiFi密码: 12345678
           ### 🧊 固件版本
           - 固件内核版本：**${{ env.VERSION_KERNEL }}**
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
