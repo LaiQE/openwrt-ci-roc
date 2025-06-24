@@ -25,7 +25,6 @@ DEFAULT_PACKAGES += \
 	kmod-qca-nss-drv-map-t \
 	kmod-qca-nss-drv-match \
 	kmod-qca-nss-drv-mirror \
-	kmod-qca-nss-drv-pppoe \
 	kmod-qca-nss-drv-pptp \
 	kmod-qca-nss-drv-qdisc \
 	kmod-qca-nss-drv-tun6rd \
@@ -34,5 +33,6 @@ DEFAULT_PACKAGES += \
 	kmod-qca-nss-drv-vxlanmgr \
 	kmod-qca-nss-drv-wifi-meshmgr \
 	# kmod-qca-nss-drv-l2tpv2 \
+	# kmod-qca-nss-drv-pppoe \
 
 $(eval $(call BuildTarget))
