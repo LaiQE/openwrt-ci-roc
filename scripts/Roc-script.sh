@@ -18,7 +18,7 @@ rm -rf feeds/packages/net/open-app-filter
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/packages/net/openlist
 rm -rf feeds/luci/applications/luci-app-openlist
-
+rm -rf feeds/packages/utils/mqttled
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
@@ -58,12 +58,12 @@ chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
 
 
 # 确保 python3-netifaces 可用
-git clone --depth=1 https://github.com/openwrt/packages temp_packages
-if [ ! -d "feeds/packages/lang/python/python3-netifaces" ]; then
-  mkdir -p feeds/packages/lang/python
-  cp -r temp_packages/lang/python/python3-netifaces feeds/packages/lang/python/
-fi
-rm -rf temp_packages
+# git clone --depth=1 https://github.com/openwrt/packages temp_packages
+# if [ ! -d "feeds/packages/lang/python/python3-netifaces" ]; then
+#   mkdir -p feeds/packages/lang/python
+#   cp -r temp_packages/lang/python/python3-netifaces feeds/packages/lang/python/
+# fi
+# rm -rf temp_packages
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
