@@ -1,6 +1,6 @@
 # 配置 Git
 git config --global --unset credential.helper
-git config --global url."https://github.com/".insteadOf "git@github.com:"
+git config --global url."http://github.com/".insteadOf "git@github.com:"
 # 修改默认IP & 固件名称 & 编译署名
 sed -i 's/192.168.1.1/192.168.233.1/g' package/base-files/files/bin/config_generate
 sed -i "s/hostname='.*'/hostname='Arthur'/g" package/base-files/files/bin/config_generate
@@ -36,25 +36,25 @@ function git_sparse_clone() {
   cd .. && rm -rf $repodir
 }
 # Go & OpenList & AdGuardHome & AriaNg & WolPlus & Lucky & OpenAppFilter & 集客无线AC控制器 & 雅典娜LED控制
-# git clone --depth=1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
-# git clone --depth=1 https://github.com/sbwml/luci-app-openlist package/openlist
-git_sparse_clone master https://github.com/kenzok8/openwrt-packages adguardhome luci-app-adguardhome
-git_sparse_clone master https://github.com/laipeng668/packages ariang luci-app-wolplus
-# git clone --depth=1 https://github.com/gdy666/luci-app-lucky package/luci-app-lucky
-# git clone --depth=1 https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
-# git clone --depth=1 https://github.com/lwb1978/openwrt-gecoosac package/openwrt-gecoosac
-# git clone --depth=1 https://github.com/NONGFAH/luci-app-athena-led package/luci-app-athena-led
+# git clone --depth=1 http://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
+# git clone --depth=1 http://github.com/sbwml/luci-app-openlist package/openlist
+git_sparse_clone master http://github.com/kenzok8/openwrt-packages adguardhome luci-app-adguardhome
+git_sparse_clone master http://github.com/laipeng668/packages ariang luci-app-wolplus
+# git clone --depth=1 http://github.com/gdy666/luci-app-lucky package/luci-app-lucky
+# git clone --depth=1 http://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
+# git clone --depth=1 http://github.com/lwb1978/openwrt-gecoosac package/openwrt-gecoosac
+# git clone --depth=1 http://github.com/NONGFAH/luci-app-athena-led package/luci-app-athena-led
 # chmod +x package/luci-app-athena-led/root/etc/init.d/athena_led package/luci-app-athena-led/root/usr/sbin/athena-led
 
 # tailscale
-git clone --depth=1 https://github.com/asvow/luci-app-tailscale package/luci-app-tailscale
+git clone --depth=1 http://github.com/asvow/luci-app-tailscale package/luci-app-tailscale
 sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' feeds/packages/net/tailscale/Makefile
 
 # 多服务器的frpc
-git clone --depth=1 https://github.com/justice2001/luci-app-multi-frpc package/luci-app-multi-frpc
+git clone --depth=1 http://github.com/justice2001/luci-app-multi-frpc package/luci-app-multi-frpc
 
 # 在线用户
-git_sparse_clone main https://github.com/haiibo/packages luci-app-onliner
+git_sparse_clone main http://github.com/haiibo/packages luci-app-onliner
 sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/zzz-default-settings
 sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/zzz-default-settings
 chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
