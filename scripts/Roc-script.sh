@@ -1,3 +1,4 @@
+git config --global --unset credential.helper
 # 修改默认IP & 固件名称 & 编译署名
 sed -i 's/192.168.1.1/192.168.233.1/g' package/base-files/files/bin/config_generate
 sed -i "s/hostname='.*'/hostname='Arthur'/g" package/base-files/files/bin/config_generate
@@ -25,13 +26,13 @@ rm -rf feeds/luci/applications/luci-app-openlist
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
   branch="$1" repourl="$2" && shift 2
+  # 确保 URL 是匿名访问形式
   git clone --depth=1 -b $branch --single-branch --filter=blob:none --sparse $repourl
   repodir=$(echo $repourl | awk -F '/' '{print $(NF)}')
   cd $repodir && git sparse-checkout set $@
   mv -f $@ ../package
   cd .. && rm -rf $repodir
 }
-
 # Go & OpenList & AdGuardHome & AriaNg & WolPlus & Lucky & OpenAppFilter & 集客无线AC控制器 & 雅典娜LED控制
 # git clone --depth=1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 # git clone --depth=1 https://github.com/sbwml/luci-app-openlist package/openlist
