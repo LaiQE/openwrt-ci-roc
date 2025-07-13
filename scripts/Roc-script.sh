@@ -33,7 +33,7 @@ function git_sparse_clone() {
 }
 
 # Go & OpenList & AdGuardHome & AriaNg & WolPlus & Lucky & OpenAppFilter & 集客无线AC控制器 & 雅典娜LED控制
-git clone --depth=1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
+# git clone --depth=1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 # git clone --depth=1 https://github.com/sbwml/luci-app-openlist package/openlist
 git_sparse_clone master https://github.com/kenzok8/openwrt-packages adguardhome luci-app-adguardhome
 git_sparse_clone master https://github.com/laipeng668/packages ariang luci-app-wolplus
@@ -52,8 +52,8 @@ git clone --depth=1 https://github.com/justice2001/luci-app-multi-frpc package/l
 
 # 在线用户
 git_sparse_clone main https://github.com/haiibo/packages luci-app-onliner
-sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/lean/default-settings/files/zzz-default-settings
-sed -i '$i uci commit nlbwmon' package/lean/default-settings/files/zzz-default-settings
+sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/zzz-default-settings
+sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/zzz-default-settings
 chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
 
 
