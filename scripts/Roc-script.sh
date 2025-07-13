@@ -18,7 +18,7 @@ rm -rf feeds/packages/net/open-app-filter
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/packages/net/openlist
 rm -rf feeds/luci/applications/luci-app-openlist
-rm -rf feeds/packages/mqttled
+
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
@@ -56,6 +56,7 @@ sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/defa
 sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/99-default-settings
 chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
 
+rm -rf package/feeds/packages/mqttled
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
