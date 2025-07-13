@@ -18,6 +18,7 @@ rm -rf feeds/packages/net/open-app-filter
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/packages/net/openlist
 rm -rf feeds/luci/applications/luci-app-openlist
+rm -rf feeds/packages/mqttled
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
