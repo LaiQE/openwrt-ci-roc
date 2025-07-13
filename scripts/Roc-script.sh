@@ -34,7 +34,7 @@ function git_sparse_clone() {
 git_sparse_clone master https://github.com/kenzok8/openwrt-packages adguardhome luci-app-adguardhome
 git_sparse_clone main https://github.com/VIKINGYFY/packages luci-app-wolplus
 # git clone --depth=1 https://github.com/gdy666/luci-app-lucky package/luci-app-lucky
-# git clone --depth=1 https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
+git clone --depth=1 https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
 # git clone --depth=1 https://github.com/lwb1978/openwrt-gecoosac package/openwrt-gecoosac
 # git clone --depth=1 https://github.com/NONGFAH/luci-app-athena-led package/luci-app-athena-led
 # chmod +x package/luci-app-athena-led/root/etc/init.d/athena_led package/luci-app-athena-led/root/usr/sbin/athena-led
@@ -49,11 +49,10 @@ git clone --depth=1 http://github.com/justice2001/luci-app-multi-frpc package/lu
 
 # 在线用户
 git_sparse_clone main http://github.com/haiibo/packages luci-app-onliner
-# sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/zzz-default-settings
-# sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/zzz-default-settings
-# chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
-sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/lean/default-settings/files/zzz-default-settings
-sed -i '$i uci commit nlbwmon' package/lean/default-settings/files/zzz-default-settings
+sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/99-default-settings-chinese
+sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/99-default-settings-chinese
+sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/99-default-settings
+sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/99-default-settings
 chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
 
 
