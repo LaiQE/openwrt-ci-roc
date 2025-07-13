@@ -56,7 +56,14 @@ sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/defa
 sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/99-default-settings
 chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
 
-rm -rf package/feeds/packages/mqttled
+
+# 确保 python3-netifaces 可用
+git clone --depth=1 https://github.com/openwrt/packages temp_packages
+if [ ! -d "feeds/packages/lang/python/python3-netifaces" ]; then
+  mkdir -p feeds/packages/lang/python
+  cp -r temp_packages/lang/python/python3-netifaces feeds/packages/lang/python/
+fi
+rm -rf temp_packages
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
