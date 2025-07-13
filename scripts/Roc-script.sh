@@ -1,4 +1,6 @@
+# 配置 Git
 git config --global --unset credential.helper
+git config --global url."https://github.com/".insteadOf "git@github.com:"
 # 修改默认IP & 固件名称 & 编译署名
 sed -i 's/192.168.1.1/192.168.233.1/g' package/base-files/files/bin/config_generate
 sed -i "s/hostname='.*'/hostname='Arthur'/g" package/base-files/files/bin/config_generate
