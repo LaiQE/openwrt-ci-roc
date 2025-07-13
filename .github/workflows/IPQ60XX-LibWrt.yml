@@ -10,6 +10,7 @@ env:
   REPO_URL: https://github.com/laipeng668/openwrt-6.x.git
   REPO_BRANCH: k6.12-nss
   CONFIG_FILE: configs/IPQ60XX.config
+  GENERAL_CONFIG_FILE: configs/General.config
   DIY_SCRIPT: scripts/Roc-script.sh
   CLASH_KERNEL: amd64
   MADS: false
@@ -116,7 +117,7 @@ jobs:
   
     - name: Load Custom Configuration(加载自定义配置)
       run: |
-        cp -f $CONFIG_FILE $OPENWRT_PATH/.config
+        cat $CONFIG_FILE $GENERAL_CONFIG_FILE >> $OPENWRT_PATH/.config
         chmod +x $DIY_SCRIPT
         cd $OPENWRT_PATH
         $GITHUB_WORKSPACE/$DIY_SCRIPT
