@@ -8,7 +8,8 @@ mkdir -p feeds/packages/net/vlmcsd/patches
 cp -f $GITHUB_WORKSPACE/patches/fix_vlmcsd_compile_with_ccache.patch feeds/packages/net/vlmcsd/patches
 
 # 移除要替换的包
-rm -rf feeds/packages/net/open-app-filter
+# rm -rf feeds/packages/net/open-app-filter
+# rm -rf feeds/luci/applications/luci-app-appfilter
 rm -rf feeds/packages/net/adguardhome
 rm -rf feeds/packages/net/openlist
 rm -rf feeds/luci/applications/luci-app-openlist
@@ -28,7 +29,7 @@ git clone --depth=1 https://github.com/sbwml/luci-app-openlist package/openlist
 git_sparse_clone master https://github.com/kenzok8/openwrt-packages adguardhome luci-app-adguardhome
 git_sparse_clone main https://github.com/VIKINGYFY/packages luci-app-wolplus
 git clone --depth=1 https://github.com/gdy666/luci-app-lucky package/luci-app-lucky
-git clone --depth=1 https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
+# git clone --depth=1 https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
 git clone --depth=1 https://github.com/lwb1978/openwrt-gecoosac package/openwrt-gecoosac
 git clone --depth=1 https://github.com/NONGFAH/luci-app-athena-led package/luci-app-athena-led
 chmod +x package/luci-app-athena-led/root/etc/init.d/athena_led package/luci-app-athena-led/root/usr/sbin/athena-led
