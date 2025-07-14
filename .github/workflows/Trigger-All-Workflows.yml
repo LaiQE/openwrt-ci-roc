@@ -19,6 +19,12 @@ jobs:
     Taiyi-ImmortalWrt:
       uses: ./.github/workflows/Taiyi-ImmortalWrt.yml
 
+    Arthur-Athena-OpenWrt:
+      uses: ./.github/workflows/Arthur&Athena-OpenWrt.yml
+ 
+    Taiyi-OpenWrt:
+      uses: ./.github/workflows/Taiyi-OpenWrt.yml
+
     x86-64-ImmortalWrt:
       uses: ./.github/workflows/x86-64-ImmortalWrt.yml
 
