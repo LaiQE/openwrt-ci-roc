@@ -50,11 +50,16 @@ git clone --depth=1 http://github.com/justice2001/luci-app-multi-frpc package/lu
 
 # 在线用户
 git_sparse_clone main http://github.com/haiibo/packages luci-app-onliner
-sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/99-default-settings-chinese
-sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/99-default-settings-chinese
+# sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/99-default-settings-chinese
+# sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/99-default-settings-chinese
 sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/emortal/default-settings/files/99-default-settings
 sed -i '$i uci commit nlbwmon' package/emortal/default-settings/files/99-default-settings
 chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
+
+# 配置zsh提示符, 不然会乱码
+sed -i '$i echo '\''PROMPT="%F{green}%n@%m%f:%F{blue}%~%f$ "'\'' >> /etc/zsh/zprofile' package/emortal/default-settings/files/99-default-settings
+# 修复vim找不到defaults.vim的问题
+sed -i '$i cp -n /usr/share/vim/vimrc /usr/share/vim/defaults.vim' package/emortal/default-settings/files/99-default-settings
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
