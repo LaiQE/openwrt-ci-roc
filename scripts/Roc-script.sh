@@ -63,7 +63,9 @@ sed -i '$i echo '\''PROMPT="%F{green}%n@%m%f:%F{blue}%~%f$ "'\'' >> /etc/zsh/zpr
 sed -i '$i cp -n /usr/share/vim/vimrc /usr/share/vim/defaults.vim' package/emortal/default-settings/files/99-default-settings
 
 # homebox
-git_sparse_clone main https://github.com/jjm2473/openwrt-apps homebox luci-app-homebox
+# git_sparse_clone main https://github.com/jjm2473/openwrt-apps homebox luci-app-homebox
+sed -i '$i src-git custom_app https://github.com/jjm2473/openwrt-apps.git' feeds.conf.default
+
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
