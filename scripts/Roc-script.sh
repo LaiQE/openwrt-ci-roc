@@ -64,7 +64,7 @@ sed -i '$i cp -n /usr/share/vim/vimrc /usr/share/vim/defaults.vim' package/emort
 
 # homebox
 # git_sparse_clone main https://github.com/jjm2473/openwrt-apps homebox luci-app-homebox
-sed -i '$i src-git custom_app https://github.com/jjm2473/openwrt-apps.git' feeds.conf.default
+# sed -i '$i src-git custom_app https://github.com/jjm2473/openwrt-apps.git' feeds.conf.default
 
 
 ./scripts/feeds update -a

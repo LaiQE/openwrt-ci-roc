@@ -112,6 +112,7 @@ jobs:
     - name: Install Feeds(安装feeds)
       run: |
         cd $OPENWRT_PATH
+        sed -i '$i src-git custom_app https://github.com/jjm2473/openwrt-apps.git' feeds.conf.default
         ./scripts/feeds update -a
         ./scripts/feeds install -a
   
