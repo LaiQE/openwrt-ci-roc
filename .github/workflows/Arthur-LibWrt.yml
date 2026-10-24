@@ -1,4 +1,4 @@
-name: Arthur-ImmortalWrt
+name: Arthur-LibWrt
 
 on:
   workflow_dispatch:
@@ -17,8 +17,8 @@ jobs:
       contents: write
       actions: write
     with:
-      repo_url: https://github.com/laipeng668/immortalwrt.git
-      repo_branch: openwrt-25.12
+      repo_url: https://github.com/LiBwrt/LibWrt.git
+      repo_branch: 25.12-nss
       config_file: configs/Arthur.config
       general_config_file: configs/Arthur-General.config
       diy_script: scripts/Arthur-script.sh
@@ -26,9 +26,11 @@ jobs:
       firmware_tag: Arthur
       kernel_file: kernel-6.12
       artifact_prefix: Arthur
-      manifest_file: immortalwrt-qualcommax-ipq60xx.manifest
+      manifest_file: libwrt-qualcommax-ipq60xx-jdcloud_re-ss-01.manifest
       release_summary: >-
-        京东云亚瑟 RE-SS-01 专用，512MiB 内存，6.12 稳定内核及 NSS 12.5。
+        LibWrt 京东云亚瑟 RE-SS-01 专用，512MiB 内存，6.12 稳定内核及 NSS 固件 11.4，
+        启用上游稳定可用的 NSS 加速模块及 Wi-Fi Mesh NSS 支持。
         内置 Docker/Compose、磁盘管理、L2TPv2/NSS、WireGuard、ZeroTier、Tailscale、
-        AdGuard Home、DDNS/DDNS-Go、FRP、WOL+、PassWall（Xray/Sing-box/Hysteria2/TUIC）；
+        Lua Dockerman、完整 AdGuard Home 界面、DDNS-Go、FRP、WOL+、
+        PassWall（Xray/Sing-box/Hysteria2/TUIC）。Wi-Fi NSS 已开启，请先通过有线配置 WPA2 密码。
         完整包列表以 config 与 manifest 为准。默认管理地址 192.168.233.1。

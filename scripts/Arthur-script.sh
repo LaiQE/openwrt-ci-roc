@@ -132,10 +132,17 @@ clone_repository() {
 mkdir -p "$(dirname "$THIRD_PARTY_SOURCES_FILE")"
 printf 'Repository\tBranch\tCommit\n' > "$THIRD_PARTY_SOURCES_FILE"
 
-# Keep firmware policy in an overlay instead of patching LuCI JavaScript or account files.
+# Keep the original Arthur defaults in a first-boot overlay.
 [ -f package/base-files/files/bin/config_generate ] || { echo "Run from the OpenWrt source root" >&2; exit 1; }
 mkdir -p files/etc/uci-defaults
 install -m 0755 "$WORKSPACE/files/etc/uci-defaults/99-arthur-defaults" files/etc/uci-defaults/
+install -m 0755 "$WORKSPACE/files/etc/uci-defaults/98-arthur-adguardhome" files/etc/uci-defaults/
+# Enable LibWrt Wi-Fi NSS; wireless requires WPA2/password configuration.
+mkdir -p files/etc/modules.d
+install -m 0644 "$WORKSPACE/files/etc/modules.d/ath11k" files/etc/modules.d/ath11k
+# Restore the upstream generator after removing the earlier default-AP patch.
+wifi_generator=package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc
+git show "HEAD:$wifi_generator" > "$wifi_generator"
 rm -rf package/luci-app-srun-autologin
 mkdir -p package/luci-app-srun-autologin
 cp -a "$WORKSPACE/package/luci-app-srun-autologin/." package/luci-app-srun-autologin/
@@ -159,12 +166,48 @@ git_sparse_replace() {
   for path in "$@"; do
     [ -d "$repo_dir/$path" ] || { echo "Missing package path: $path" >&2; exit 1; }
     case "$path" in
-      applications/*) rm -rf "feeds/luci/$path"; mv "$repo_dir/$path" "feeds/luci/$path" ;;
+      applications/*|collections/*) rm -rf "feeds/luci/$path"; mv "$repo_dir/$path" "feeds/luci/$path" ;;
+      luci-app-*) rm -rf "package/$path"; mv "$repo_dir/$path" "package/$path" ;;
       *) rm -rf "feeds/packages/$path"; mv "$repo_dir/$path" "feeds/packages/$path" ;;
     esac
   done
   rm -rf "$repo_dir"
 }
+
+if package_enabled luci-app-adguardhome; then
+  # Restore the original richer Lua UI; retain the current feeds-built core.
+  rm -rf feeds/luci/applications/luci-app-adguardhome
+  git_sparse_replace https://github.com/kenzok8/openwrt-packages master luci-app-adguardhome
+  python3 - <<'PY'
+from pathlib import Path
+base = Path('package/luci-app-adguardhome')
+makefile = base / 'Makefile'
+text = makefile.read_text()
+start = text.index('# luci-compat only exists')
+end = text.index('LUCI_DESCRIPTION', start)
+text = text[:start] + 'LUCI_DEPENDS+= +luci-compat\n' + text[end:]
+needle = 'define Package/luci-app-adguardhome/postinst\n#!/bin/sh\n'
+assert text.count(needle) == 1, 'Unexpected AdGuard Home postinst'
+text = text.replace(needle, needle + '[ -n "$${IPKG_INSTROOT}" ] && exit 0\n')
+makefile.write_text(text)
+init = base / 'root/etc/init.d/AdGuardHome'
+text = init.read_text()
+needle = '\tset firewall.AdGuardHome.type=script\n'
+assert text.count(needle) == 1, 'Unexpected AdGuard Home firewall include'
+text = text.replace(needle, needle + '\tset firewall.AdGuardHome.fw4_compatible=1\n')
+init.write_text(text)
+PY
+fi
+if package_enabled luci-app-tailscale; then
+  rm -rf feeds/luci/applications/luci-app-tailscale-community
+  clone_repository https://github.com/asvow/luci-app-tailscale main package/luci-app-tailscale
+  # As in the original project, the UI owns the service and UCI configuration.
+  sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d' feeds/packages/net/tailscale/Makefile
+fi
+if package_enabled luci-theme-argon; then
+  rm -rf feeds/luci/themes/luci-theme-argon feeds/luci/applications/luci-app-argon-config
+  clone_repository https://github.com/jerrykuku/luci-theme-argon master package/luci-theme-argon
+fi
 
 if package_enabled luci-app-frpc luci-app-multi-frpc frpc; then
   git_sparse_replace https://github.com/immortalwrt/packages master net/frp
@@ -174,6 +217,22 @@ if package_enabled luci-app-frpc; then
 fi
 if package_enabled docker-compose; then
   git_sparse_replace https://github.com/immortalwrt/packages master utils/docker-compose
+fi
+if package_enabled luci-app-dockerman; then
+  # Keep the maintained Lua UI and its matching client library (top-level Docker menu).
+  # Docker Engine/CLI/Compose still come from the current feeds.
+  git_sparse_replace https://github.com/immortalwrt/luci openwrt-24.10 \
+    applications/luci-app-dockerman collections/luci-lib-docker
+  # The Lua client declares v1.40 but otherwise sends unversioned requests. Use
+  # that supported API so new engines retain the response fields the UI needs.
+  python3 - <<'PY'
+from pathlib import Path
+path = Path('feeds/luci/collections/luci-lib-docker/luasrc/docker.lua')
+text = path.read_text()
+needle = '\theader = (http_method or "GET")'
+assert text.count(needle) == 1, 'Unexpected Lua Docker HTTP client layout'
+path.write_text(text.replace(needle, '\tpath = "/" .. options.version .. path\n' + needle))
+PY
 fi
 
 if package_enabled luci-app-multi-frpc; then
@@ -198,11 +257,35 @@ if package_enabled luci-app-homebox; then
   rm -rf package/homebox-apps
   mkdir -p package/homebox-apps
   cp package/homebox-source/luci-alias.mk package/homebox-apps/
+  mv package/homebox-source/homebox package/homebox-apps/
   mv package/homebox-source/luci-app-homebox package/homebox-apps/
   rm -rf package/homebox-source
-  cp -a "$WORKSPACE/package/homebox" package/homebox-apps/homebox
   sed -i 's/PKG_VERSION:=1.0.1-r4/PKG_VERSION:=1.0.1/;s/^PKG_RELEASE:=$/PKG_RELEASE:=4/' package/homebox-apps/luci-app-homebox/Makefile
+  # The old recipe omits Go's host-tool path when building go-bindata and assets.
+  python3 - <<'PY'
+from pathlib import Path
+path = Path('package/homebox-apps/homebox/Makefile')
+text = path.read_text()
+needle = '\t\tGOPATH=$(PKG_BUILD_DIR)/.go_work/build '
+assert text.count(needle) == 1, 'Unexpected Homebox host tool invocation'
+text = text.replace(needle, '\t\t$(GO_BIN_PATH) GOPATH=$(PKG_BUILD_DIR)/.go_work/build ')
+needle = 'PATH=$(PKG_BUILD_DIR)/.go_work/build/bin:$$$$PATH'
+assert text.count(needle) == 1, 'Unexpected Homebox asset build invocation'
+text = text.replace(needle, 'PATH=$(PKG_BUILD_DIR)/.go_work/build/bin:$(STAGING_DIR_HOSTPKG)/lib/go-$(GO_HOST_VERSION)/bin:$$$$PATH')
+path.write_text(text)
+PY
 fi
+
+# Preserve the user's original firmware signature without duplicating it on Prepare.
+python3 - <<'PY'
+from pathlib import Path
+path = Path('feeds/luci/modules/luci-mod-status/htdocs/luci-static/resources/view/status/include/10_system.js')
+text = path.read_text()
+if 'Build by LaiQE' not in text:
+    needle = "(luciversion || '')"
+    assert text.count(needle) == 1, 'Unexpected LuCI firmware-version layout'
+    path.write_text(text.replace(needle, needle + " + (' / Build by LaiQE')"))
+PY
 
 python3 "$WORKSPACE/scripts/apply-package-updates.py" "$WORKSPACE/configs/package-updates.json"
 

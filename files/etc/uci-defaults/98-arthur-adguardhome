@@ -1,0 +1,7 @@
+#!/bin/sh
+# Use the richer LuCI application's service with the feeds-built core binary.
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'jdcloud,re-ss-01' ] || exit 0
+[ -x /etc/init.d/AdGuardHome ] || exit 0
+[ ! -x /etc/init.d/adguardhome ] || /etc/init.d/adguardhome disable
+/etc/init.d/AdGuardHome enable
+exit 0

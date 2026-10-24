@@ -30,14 +30,11 @@ seeds=("$WORKSPACE/configs/Arthur.config" "$WORKSPACE/configs/Arthur-General.con
 prepare() {
     if [ ! -d "$OPENWRT_PATH/.git" ]; then
         git clone --depth 1 --single-branch --branch "$REPO_BRANCH" "$REPO_URL" "$OPENWRT_PATH"
-        if [ "$(git -C "$OPENWRT_PATH" rev-parse HEAD)" != "$REPO_COMMIT" ]; then
-            git -C "$OPENWRT_PATH" fetch --depth 1 origin "$REPO_COMMIT"
-            git -C "$OPENWRT_PATH" checkout --detach "$REPO_COMMIT"
-        fi
     fi
     cd "$OPENWRT_PATH"
-    [ "$(git rev-parse HEAD)" = "$REPO_COMMIT" ] || {
-        echo 'Source differs from configs/source.env; use a new volume for a new baseline.' >&2
+    git fetch --depth 1 origin "$REPO_BRANCH"
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ] || {
+        echo 'The upstream source advanced; use a new container/volume to build the latest baseline.' >&2
         exit 1
     }
     local fingerprint
@@ -88,6 +85,9 @@ case "$STAGE" in
         make -j"$JOBS" V=s
         python3 "$WORKSPACE/tests/network/first-boot-checks.py" \
             "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
+        python3 "$WORKSPACE/tests/firmware/checks.py" \
+            "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
+            "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"
         cp -a bin/targets/qualcommax/ipq60xx/. "$BUILD_ROOT/artifacts/"
         ;;
     *) echo "Unknown stage: $STAGE" >&2; exit 1 ;;

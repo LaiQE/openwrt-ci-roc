@@ -6,7 +6,7 @@
 
 发现与症状高度一致的[上游问题 #69](https://github.com/qosmio/openwrt-ipq/issues/69)：
 PPPoL2TP 的引用计数错误及 ECM 重复获取 PPP 锁可引发 panic、死锁和 RCU stall。
-本次源码已经包含对应修复，并已在实际构建目录中核对补丁应用后的 C 代码。
+LibWrt 基线的内核补丁和所选 NSS feed 已包含对应修复，并已核对实际应用补丁后的 C 代码。
 目前没有确认需要另外修改驱动的具体问题。
 
 旧固件没有提供崩溃堆栈，不能断定其原因；源码检查和编译也不能代替真机连接、
@@ -14,8 +14,10 @@ PPPoL2TP 的引用计数错误及 ECM 重复获取 PPP 锁可引发 panic、死�
 
 ## 核对的源码
 
-主仓库基线：`laipeng668/immortalwrt@0a98e096208584bf90982f59f6d5a43f89443276`，
-Linux `6.12.108`，NSS feed `laipeng668/nss-packages@0b692dc3540321427affe325cd17f14fae8c2133`。
+主仓库基线：`LiBwrt/LibWrt@3a3d0b08595530070ad9cd8a20c0ae4ea3e77f70`，
+Linux `6.12.108`，NSS feed `qosmio/nss-packages@0d970dbf0185e3f53709bd803e8a466598023c57`。
+采用 NSS 固件 11.4.0.5 Release 6，并由配方自动选择 11.4 驱动和客户端。
+ECM 继续使用该 feed 的当前维护版本和修复，不应仅凭包版本号将它降级。
 
 | 检查项 | 本次实际代码 |
 | --- | --- |

@@ -3,13 +3,14 @@ param(
     [ValidateSet('Prepare', 'Config', 'Download', 'Build', 'Status', 'Logs', 'Export', 'Shell')]
     [string]$Stage = 'Build',
     [ValidateRange(1, 64)][int]$Jobs = 4,
-    [string]$Container = 'openwrt-arthur-builder',
-    [string]$Volume = 'openwrt-arthur-work',
+    [string]$Container = 'openwrt-arthur-libwrt-builder',
+    [string]$Volume = 'openwrt-arthur-libwrt-work',
+    [switch]$RebuildImage,
     [switch]$Detach
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
-$image = 'localhost/openwrt-arthur-builder:24.04'
+$image = 'localhost/openwrt-arthur-libwrt-builder:24.04'
 
 function Invoke-Podman {
     & podman @args
@@ -37,10 +38,17 @@ try {
     }
     & podman container exists $Container
     if ($LASTEXITCODE -eq 1) {
-        Invoke-Podman build -t $image -f Containerfile .
-        Invoke-Podman volume create $Volume
+        $imageArguments = @('build', '-t', $image, '-f', 'Containerfile')
+        if ($RebuildImage) { $imageArguments += @('--no-cache', '--pull=always') }
+        Invoke-Podman @imageArguments .
+        & podman volume exists $Volume
+        if ($LASTEXITCODE -eq 1) {
+            Invoke-Podman volume create $Volume
+        } elseif ($LASTEXITCODE -ne 0) {
+            throw 'Unable to inspect the Podman build volume'
+        }
         Invoke-Podman run --rm --user root --volume "${Volume}:/work" $image chown builder:builder /work
-        Invoke-Podman run -d --name $Container --volume "${Volume}:/work" $image
+        Invoke-Podman run -d --init --name $Container --volume "${Volume}:/work" $image
     } elseif ($LASTEXITCODE -ne 0) {
         throw 'Unable to inspect the Podman container'
     } else {
@@ -53,6 +61,9 @@ try {
     # Keep source/build trees on Linux ext4, and copy only the small configuration inputs.
     Invoke-Podman exec --user root $Container chown -R builder:builder /workspace
     foreach ($directory in @('configs', 'scripts', 'files', 'package', 'tests')) {
+        # Copy a fresh input snapshot, including deletions from the repository.
+        Invoke-Podman exec --user root $Container rm -rf -- "/workspace/$directory"
+        Invoke-Podman exec --user root $Container mkdir -p "/workspace/$directory"
         Invoke-Podman cp (Join-Path $repoRoot "$directory/.") "${Container}:/workspace/$directory"
     }
     Invoke-Podman exec --user root $Container chown -R builder:builder /workspace

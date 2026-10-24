@@ -21,6 +21,11 @@ for program in ('proot', 'qemu-aarch64'):
     if not shutil.which(program):
         raise SystemExit(f'Required build-host tool is missing: {program}')
 
+# Verify the installed module policy, before any first-boot script can run.
+# The LibWrt validation image must actually enable Wi-Fi NSS.
+ath11k = (root / 'etc/modules.d/ath11k').read_text().split()
+assert ath11k == ['ath11k', 'nss_offload=1', 'frame_mode=2'], ath11k
+
 
 class Router:
     def __init__(self, directory, board='jdcloud,re-ss-01'):
@@ -29,9 +34,13 @@ class Router:
         self.tmp = self.directory / 'tmp'
         shutil.copytree(root / 'etc', self.etc, symlinks=True)
         (self.tmp / '.uci').mkdir(parents=True)
+        (self.tmp / 'lock').mkdir()
         (self.tmp / 'sysinfo').mkdir()
         (self.tmp / 'sysinfo/board_name').write_text(board + '\n')
         (self.tmp / 'arthur-defaults').write_bytes(defaults.read_bytes())
+        self.vim = self.directory / 'vim'
+        if (root / 'usr/share/vim').is_dir():
+            shutil.copytree(root / 'usr/share/vim', self.vim, symlinks=True)
         for name in ('network', 'system'):
             (self.etc / 'config' / name).unlink(missing_ok=True)
         (self.etc / 'board.json').write_text(json.dumps({
@@ -43,10 +52,11 @@ class Router:
         }))
 
     def run(self, *command, check=True):
+        bindings = ['-b', f'{self.vim}:/usr/share/vim'] if self.vim.is_dir() else []
         result = subprocess.run([
             'proot', '-q', shutil.which('qemu-aarch64'), '-r', str(root),
             '-b', f'{self.etc}:/etc', '-b', f'{self.tmp}:/tmp',
-            '-b', '/dev:/dev', '-b', '/proc:/proc', '-w', '/', *command,
+            '-b', '/dev:/dev', '-b', '/proc:/proc', *bindings, '-w', '/', *command,
         ], capture_output=True, text=True, timeout=60)
         if check and result.returncode:
             raise AssertionError(f'{command}:\n{result.stdout}\n{result.stderr}')
@@ -101,6 +111,12 @@ with tempfile.TemporaryDirectory(prefix='arthur-first-boot-') as temporary:
     assert router.get('network.wan.proto') == 'dhcp'
     assert router.get('network.wan.device') == 'wan'
     router.check_pool()
+    router.run('/bin/busybox', 'lsusb')
+    if (root / 'usr/bin/zsh').is_file():
+        root_account = next(line for line in (router.etc / 'passwd').read_text().splitlines()
+                            if line.startswith('root:'))
+        assert root_account.endswith(':/usr/bin/zsh'), root_account
+        assert router.get('ttyd.@ttyd[0].command') == '/bin/login -f root'
 
     # Repair the exact invalid state shipped by the first 25.12 image.
     router.run('/sbin/uci', 'set', 'network.lan.ipaddr=192.168.233.1')
@@ -121,4 +137,5 @@ with tempfile.TemporaryDirectory(prefix='arthur-first-boot-') as temporary:
     assert (other.etc / 'config/network').read_bytes() == before
 
 print('First-boot checks passed: clean ARM64 initialization, LAN/WAN bridge mapping, '
-      'DHCP pool and dnsmasq parsing, broken-state repair, custom subnet retention, board guard')
+      'DHCP pool and dnsmasq parsing, broken-state repair, custom subnet retention, '
+      'board guard, LibWrt Wi-Fi NSS enabled at module load')

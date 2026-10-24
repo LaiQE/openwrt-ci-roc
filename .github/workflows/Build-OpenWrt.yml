@@ -318,6 +318,9 @@ jobs:
         sudo -E apt-get -y install qemu-user proot
         python3 "$GITHUB_WORKSPACE/tests/network/first-boot-checks.py" \
           "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
+        python3 "$GITHUB_WORKSPACE/tests/firmware/checks.py" \
+          "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
+          "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"
 
     - name: Check Space Usage(检查空间使用情况)
       if: (!cancelled())

@@ -17,6 +17,15 @@ uci set system.@system[0].zonename='Asia/Shanghai'
 uci set system.@system[0].timezone='CST-8'
 uci commit network
 uci commit system
-# Keep terminal authentication. A browser session must not grant a root shell.
+if [ -x /usr/bin/zsh ]; then
+	sed -i '/^root:/s|:[^:]*$|:/usr/bin/zsh|' /etc/passwd
+	grep -q '^PROMPT=' /etc/zsh/zprofile 2>/dev/null || \
+		printf '%s\n' 'PROMPT="%F{green}%n@%m%f:%F{blue}%~%f$ "' >> /etc/zsh/zprofile
+fi
+if [ -f /usr/share/vim/vimrc ] && [ ! -f /usr/share/vim/defaults.vim ]; then
+	cp /usr/share/vim/vimrc /usr/share/vim/defaults.vim
+fi
+uci -q set ttyd.@ttyd[0].command='/bin/login -f root'
+uci -q commit ttyd
 # Keep Docker data on its upstream default until a data partition is mounted.
 exit 0
