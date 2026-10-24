@@ -1,0 +1,17 @@
+{
+	"luci-app-srun-autologin": {
+		"description": "允许配置和运行 srun 校园网自动认证",
+		"read": {
+			"uci": [ "srun-autologin" ],
+			"file": {
+				"/usr/bin/srun-autologin": [ "exec" ]
+			}
+		},
+		"write": {
+			"uci": [ "srun-autologin" ],
+			"file": {
+				"/usr/bin/srun-autologin": [ "exec" ]
+			}
+		}
+	}
+}

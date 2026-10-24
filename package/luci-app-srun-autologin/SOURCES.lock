@@ -1,0 +1,20 @@
+# Reproducibility/source manifest for srun-autologin 1.0.0
+# Recorded: 2026-09-10 (Asia/Shanghai)
+
+[srun_release_binary]
+version=0.6.2
+target=aarch64-unknown-linux-musl
+url=https://github.com/zu1k/srun/releases/download/0.6.2/srun-0.6.2-aarch64-unknown-linux-musl.tar.xz
+sha256=25c2e3645f6fb508d186812790165f7ed3f9d17fc2fef5257c9417957ed4c526
+license=GPL-3.0
+
+[srun_source]
+version=0.6.2
+git=https://github.com/zu1k/srun.git
+tag=0.6.2
+archive=https://github.com/zu1k/srun/archive/refs/tags/0.6.2.tar.gz
+sha256=9d4fb50279db67fcc2e8b457960342d059d558ea0df79c82b9ab735c6b713358
+license=GPL-3.0
+
+[prebuilt_elf]
+sha256=04b46c45a5b83c9721b09962b5c0b2d31a03c26c81b928a5ac5ffa10d4ddb358

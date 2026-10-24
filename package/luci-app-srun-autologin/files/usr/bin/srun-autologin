@@ -1,0 +1,356 @@
+#!/bin/sh
+
+# srun-autologin - connectivity watchdog for srun on OpenWrt
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+PROGRAM="srun-autologin"
+CONFIG_NAME="srun-autologin"
+CONFIG_SECTION="main"
+RUNTIME_CONFIG="${SRUN_AUTOLOGIN_RUNTIME_CONFIG:-/var/run/srun-autologin.json}"
+STATUS_FILE="${SRUN_AUTOLOGIN_STATUS_FILE:-/var/run/srun-autologin.status}"
+LOCK_DIR="${SRUN_AUTOLOGIN_LOCK_DIR:-/var/lock/srun-autologin.lock}"
+JSHN_LIB="${SRUN_AUTOLOGIN_JSHN_LIB:-/usr/share/libubox/jshn.sh}"
+SRUN_VERSION="0.6.2"
+DEFAULT_RELEASE_URL="https://github.com/zu1k/srun/releases/download/${SRUN_VERSION}"
+
+log() {
+	logger -t "$PROGRAM" -- "$*"
+	[ -t 1 ] && printf '%s\n' "$*"
+}
+
+write_status() {
+	status_state="$1"
+	shift
+	umask 077
+	{
+		printf 'state=%s\n' "$status_state"
+		printf 'updated=%s\n' "$(date '+%Y-%m-%d %H:%M:%S %z')"
+		printf 'message=%s\n' "$*"
+	} > "$STATUS_FILE"
+}
+
+load_settings() {
+	# Defaults also make the script useful before UCI has been configured.
+	enabled=0
+	username=""
+	password=""
+	server="http://net.zju.edu.cn"
+	strict_bind=0
+	double_stack=0
+	retry_delay=1000
+	retry_times=3
+	param_n=200
+	srun_type=1
+	acid=60
+	os_name="Windows"
+	device_name="Windows 10"
+	ip_address=""
+	if_name=""
+	check_host="223.5.5.5"
+	check_count=3
+	check_timeout=2
+	interval=600
+	download_enabled=1
+	release_url="$DEFAULT_RELEASE_URL"
+
+	if command -v uci >/dev/null 2>&1 && uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}" >/dev/null 2>&1; then
+		enabled="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.enabled" || printf '0')"
+		username="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.username")"
+		password="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.password")"
+		server="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.server" || printf '%s' "$server")"
+		strict_bind="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.strict_bind" || printf '0')"
+		double_stack="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.double_stack" || printf '0')"
+		retry_delay="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.retry_delay" || printf '1000')"
+		retry_times="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.retry_times" || printf '3')"
+		param_n="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.n" || printf '200')"
+		srun_type="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.type" || printf '1')"
+		acid="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.acid" || printf '60')"
+		os_name="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.os" || printf 'Windows')"
+		device_name="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.name" || printf 'Windows 10')"
+		ip_address="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.ip")"
+		if_name="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.if_name")"
+		check_host="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.check_host" || printf '223.5.5.5')"
+		check_count="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.check_count" || printf '3')"
+		check_timeout="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.check_timeout" || printf '2')"
+		interval="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.interval" || printf '600')"
+		download_enabled="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.download_enabled" || printf '1')"
+		release_url="$(uci -q get "${CONFIG_NAME}.${CONFIG_SECTION}.release_url" || printf '%s' "$release_url")"
+	fi
+
+	case "$check_count" in
+		1|2|3) ;;
+		*) check_count=3 ;;
+	esac
+	case "$check_timeout" in
+		''|*[!0-9]*|0) check_timeout=2 ;;
+	esac
+	case "$interval" in
+		''|*[!0-9]*) interval=600 ;;
+	esac
+	[ "$interval" -ge 15 ] 2>/dev/null || interval=15
+}
+
+script_dir() {
+	CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd
+}
+
+find_srun() {
+	local_dir="$(script_dir)"
+	for candidate in "${SRUN_AUTOLOGIN_BINARY:-}" "$local_dir/srun" /usr/bin/srun /usr/local/bin/srun; do
+		[ -n "$candidate" ] || continue
+		if [ -x "$candidate" ]; then
+			SRUN_BIN="$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+	release_for_arch() {
+	case "${SRUN_AUTOLOGIN_UNAME_M:-$(uname -m 2>/dev/null)}" in
+		aarch64|arm64)
+			RELEASE_TARGET="aarch64-unknown-linux-musl"
+			RELEASE_SHA256="25c2e3645f6fb508d186812790165f7ed3f9d17fc2fef5257c9417957ed4c526"
+			;;
+		*)
+			log "此构建仅支持 JDCloud RE-SS-01 的 AArch64 架构；当前为：$(uname -m 2>/dev/null)。"
+			return 1
+			;;
+	esac
+}
+
+fetch_file() {
+	fetch_url="$1"
+	fetch_dest="$2"
+	if command -v uclient-fetch >/dev/null 2>&1; then
+		uclient-fetch -O "$fetch_dest" "$fetch_url"
+	elif command -v wget >/dev/null 2>&1; then
+		wget -O "$fetch_dest" "$fetch_url"
+	elif command -v curl >/dev/null 2>&1; then
+		curl -fL -o "$fetch_dest" "$fetch_url"
+	else
+		log "找不到下载工具（需要 uclient-fetch、wget 或 curl）。"
+		return 1
+	fi
+}
+
+download_srun() {
+	release_for_arch || return 1
+	command -v sha256sum >/dev/null 2>&1 || {
+		log "找不到 sha256sum，拒绝安装未经校验的二进制。"
+		return 1
+	}
+	command -v xz >/dev/null 2>&1 || {
+		log "找不到 xz，请先安装 xz，或使用已内置 srun 的离线安装包。"
+		return 1
+	}
+
+	tmp_dir="$(mktemp -d /tmp/srun-autologin.XXXXXX)" || return 1
+	archive_name="srun-${SRUN_VERSION}-${RELEASE_TARGET}.tar.xz"
+	archive_path="$tmp_dir/$archive_name"
+	download_url="${release_url%/}/$archive_name"
+	log "正在下载 $download_url"
+	if ! fetch_file "$download_url" "$archive_path"; then
+		rm -rf -- "$tmp_dir"
+		log "下载失败。校园网未认证时 GitHub 可能不可达；请在电脑上使用对应架构的离线安装包，或手动把 srun 放到 $(script_dir)/srun。"
+		return 1
+	fi
+	actual_sha256="$(sha256sum "$archive_path" | awk '{print $1}')"
+	if [ "$actual_sha256" != "$RELEASE_SHA256" ]; then
+		rm -rf -- "$tmp_dir"
+		log "srun 下载文件校验失败，已拒绝安装。"
+		return 1
+	fi
+	if ! tar -xJf "$archive_path" -C "$tmp_dir"; then
+		rm -rf -- "$tmp_dir"
+		log "无法解压 srun 下载文件。"
+		return 1
+	fi
+	install_dir="$(script_dir)"
+	if ! install -m 0755 "$tmp_dir/srun" "$install_dir/srun" 2>/dev/null; then
+		cp "$tmp_dir/srun" "$install_dir/srun" && chmod 0755 "$install_dir/srun" || {
+			rm -rf -- "$tmp_dir"
+			log "无法写入 $install_dir/srun。"
+			return 1
+		}
+	fi
+	rm -rf -- "$tmp_dir"
+	SRUN_BIN="$install_dir/srun"
+	log "srun ${SRUN_VERSION} 已安装到 $SRUN_BIN"
+}
+
+network_online() {
+	attempt=1
+	while [ "$attempt" -le "$check_count" ]; do
+		if ping -c 1 -W "$check_timeout" "$check_host" >/dev/null 2>&1; then
+			return 0
+		fi
+		attempt=$((attempt + 1))
+	done
+	return 1
+}
+
+write_runtime_config() {
+	if [ -z "$username" ] || [ -z "$password" ]; then
+		log "账号或密码未配置。"
+		return 1
+	fi
+	if [ ! -r "$JSHN_LIB" ]; then
+		log "缺少 $JSHN_LIB，无法安全生成 JSON 配置。"
+		return 1
+	fi
+	# shellcheck disable=SC1091
+	. "$JSHN_LIB"
+	json_init
+	json_add_string server "$server"
+	json_add_boolean strict_bind "$strict_bind"
+	json_add_boolean double_stack "$double_stack"
+	json_add_int retry_delay "$retry_delay"
+	json_add_int retry_times "$retry_times"
+	json_add_int n "$param_n"
+	json_add_int type "$srun_type"
+	json_add_int acid "$acid"
+	json_add_string os "$os_name"
+	json_add_string name "$device_name"
+	json_add_array users
+	json_add_object
+	json_add_string username "$username"
+	json_add_string password "$password"
+	if [ -n "$ip_address" ]; then
+		json_add_string ip "$ip_address"
+	elif [ -n "$if_name" ]; then
+		json_add_string if_name "$if_name"
+	fi
+	json_close_object
+	json_close_array
+	umask 077
+	json_dump > "$RUNTIME_CONFIG"
+}
+
+run_login() {
+	write_runtime_config || return 1
+	login_output="$(mktemp /tmp/srun-login.XXXXXX)" || return 1
+	"$SRUN_BIN" login -c "$RUNTIME_CONFIG" > "$login_output" 2>&1
+	login_rc=$?
+	# Upstream 0.6.2 can return zero after a portal rejection, so connectivity is
+	# the authoritative result. Never log its debug dump on success: it contains
+	# the clear-text password.
+	sleep 2
+	if network_online; then
+		rm -f -- "$login_output"
+		write_status online "认证成功，${check_host} 可达"
+		log "认证成功，网络已恢复。"
+		return 0
+	fi
+	# Redact the password line before sending diagnostic output to logread.
+	sed 's/^\([[:space:]]*password: \).*/\1"***",/' "$login_output" | logger -t "$PROGRAM"
+	rm -f -- "$login_output"
+	write_status failed "srun 返回 ${login_rc}，但认证后 ${check_host} 仍不可达"
+	log "认证未恢复网络（srun 退出码：$login_rc）。"
+	return 1
+}
+
+acquire_lock() {
+	mkdir -p "$(dirname "$LOCK_DIR")"
+	if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+		log "已有检查任务正在运行，本次跳过。"
+		return 1
+	fi
+	trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT INT TERM
+}
+
+check_once() {
+	respect_enabled="$1"
+	load_settings
+	if [ "$respect_enabled" = "1" ] && [ "$enabled" != "1" ]; then
+		write_status disabled "服务未启用"
+		return 0
+	fi
+	acquire_lock || return 0
+	if ! find_srun; then
+		if [ "$download_enabled" != "1" ]; then
+			write_status missing "未找到 srun，且自动下载已关闭"
+			log "同级目录和标准路径中均未找到 srun。"
+			return 1
+		fi
+		download_srun || {
+			write_status missing "未找到 srun，自动下载失败"
+			return 1
+		}
+	fi
+	if network_online; then
+		write_status online "${check_host} 可达，无需认证"
+		log "网络通畅，无需认证。"
+		return 0
+	fi
+	write_status authenticating "${check_host} 不可达，正在调用 srun"
+	log "网络不通，开始进行 srun 认证。"
+	run_login
+}
+
+show_status() {
+	if [ -r "$STATUS_FILE" ]; then
+		cat "$STATUS_FILE"
+	else
+		printf 'state=unknown\nupdated=-\nmessage=尚未执行检查\n'
+	fi
+	if find_srun; then
+		printf 'binary=%s\n' "$SRUN_BIN"
+	else
+		printf 'binary=missing\n'
+	fi
+}
+
+run_daemon() {
+	while :; do
+		"$0" check
+		load_settings
+		sleep "$interval" &
+		wait $!
+	done
+}
+
+usage() {
+	cat <<'EOF'
+用法: srun-autologin {check|run|login|download|status|daemon}
+  check     服务/cron 使用；未启用时跳过
+  run       立即检查；忽略启用开关
+  login     立即认证；忽略连通性检查与启用开关
+  download  下载并校验适合当前 CPU 的 srun
+  status    输出最近一次运行状态
+  daemon    按 UCI 中的 interval 持续检查
+EOF
+}
+
+case "${1:-check}" in
+	check)
+		check_once 1
+		;;
+	run)
+		check_once 0
+		;;
+	login)
+		load_settings
+		acquire_lock || exit 0
+		find_srun || download_srun || exit 1
+		run_login
+		;;
+	download)
+		load_settings
+		acquire_lock || exit 0
+		download_srun
+		;;
+	status)
+		show_status
+		;;
+	daemon)
+		run_daemon
+		;;
+	-h|--help|help)
+		usage
+		;;
+	*)
+		usage >&2
+		exit 2
+		;;
+esac

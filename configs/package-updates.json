@@ -1,0 +1,17 @@
+{
+  "net/tailscale": {
+    "from": "1.104.1",
+    "version": "1.104.2",
+    "sha256": "4c1c806e16507414a1459afcdc399f6a1323c21a1ac90f07bea0465fd8fd7e1d"
+  },
+  "net/frp": {
+    "from": "0.71.0",
+    "version": "0.71.1",
+    "sha256": "079f5fdebfbf8b8fa42c8b03245d169a7b5298697d754d7345ea25f09e496722"
+  },
+  "utils/docker-compose": {
+    "from": "5.6.0",
+    "version": "5.6.1",
+    "sha256": "bd1318503f131bc7f02538f153a7ead52f27ea30a99aee09f153a5dab9e6230a"
+  }
+}

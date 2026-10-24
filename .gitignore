@@ -1,0 +1,4 @@
+.local/
+artifacts/
+__pycache__/
+*.pyc

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Applied once on first boot. Do not repartition or format any storage here.
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = "jdcloud,re-ss-01" ] || exit 0
+uci set network.lan.ipaddr='192.168.233.1'
+uci set system.@system[0].hostname='Arthur'
+uci set system.@system[0].zonename='Asia/Shanghai'
+uci set system.@system[0].timezone='CST-8'
+uci commit network
+uci commit system
+# Keep terminal authentication. A browser session must not grant a root shell.
+# Keep Docker data on its upstream default until a data partition is mounted.
+exit 0

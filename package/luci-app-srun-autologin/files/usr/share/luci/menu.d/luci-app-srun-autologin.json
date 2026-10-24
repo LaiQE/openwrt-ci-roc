@@ -1,0 +1,13 @@
+{
+	"admin/services/srun-autologin": {
+		"title": "校园网自动认证",
+		"order": 45,
+		"action": {
+			"type": "view",
+			"path": "srun-autologin/config"
+		},
+		"depends": {
+			"acl": [ "luci-app-srun-autologin" ]
+		}
+	}
+}
