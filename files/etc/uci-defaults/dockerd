@@ -1,0 +1,175 @@
+#!/bin/sh
+# Arthur eMMC storage/swap initialization; preserve existing user data.
+# OpenWrt's BusyBox ash supports function-local variables.
+# shellcheck disable=SC3043
+set -e
+
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'jdcloud,re-ss-01' ] || exit 0
+disk=/dev/mmcblk0
+target=/opt/docker
+backup=/tmp/arthur-storage-backup
+mkdir -p /tmp/lock "$backup" || exit 1
+chmod 700 "$backup" || exit 1
+exec 9>/tmp/lock/arthur-storage.lock
+flock -n 9 || exit 1
+on_exit() {
+	local status=$?
+	[ "$status" -eq 0 ] || logger -t arthur-storage "Initialization failed; keeping script for retry (exit $status)"
+}
+trap on_exit EXIT
+
+fail() {
+	logger -s -t arthur-storage "$*"
+	exit 1
+}
+
+# Limit label lookup to the user area of this eMMC, excluding mmcblk0boot0/1.
+partition_named() {
+	local partitions
+	partitions=$(lsblk -nrpo NAME,TYPE,PARTLABEL "$disk") || fail "Cannot read partitions on $disk"
+	printf '%s\n' "$partitions" | awk -v label="$1" '$2 == "part" && $3 == label {print $1}'
+}
+
+check_partition() {
+	case "$1" in
+		/dev/mmcblk0p[0-9]*) [ -b "$1" ] || fail "Missing block device: $1" ;;
+		*) fail "Ambiguous or unexpected partition: $1" ;;
+	esac
+}
+
+filesystem() {
+	blkid -p -s TYPE -o value "$1" 2>/dev/null || true
+}
+
+# Remove duplicate UUID entries so block-mount cannot select an older disabled one.
+remove_duplicate() {
+	local uuid device
+	config_get uuid "$1" uuid
+	config_get device "$1" device
+	if [ "$1" != "$keep_section" ]; then
+		if { [ -n "$keep_uuid" ] && [ "$uuid" = "$keep_uuid" ]; } || [ "$device" = "$keep_device" ]; then
+			uci -q delete "fstab.$1" || fail "Cannot remove duplicate fstab entry $1"
+		fi
+	fi
+	return 0
+}
+
+prepare_storage() {
+	local created=0 first last sectors type uuid source previous entries
+	storage=$(partition_named storage) || fail 'Cannot locate storage partition'
+	if [ -z "$storage" ] && [ -b "${disk}p27" ]; then
+		storage=${disk}p27
+	fi
+	if [ -z "$storage" ]; then
+		# Move the backup GPT to the physical end before calculating free space.
+		if [ ! -f "$backup/gpt-before-init.sgdisk" ]; then
+			sgdisk --backup="$backup/gpt-before-init.sgdisk" "$disk" || fail 'GPT backup failed'
+		fi
+		sgdisk -e "$disk" || fail 'GPT repair failed'
+		first=$(sgdisk -F "$disk") || fail 'Cannot locate free extent start'
+		last=$(sgdisk -E "$disk") || fail 'Cannot locate free extent end'
+		first=$(printf '%s\n' "$first" | tail -n 1)
+		last=$(printf '%s\n' "$last" | tail -n 1)
+		case "$first:$last" in *[!0-9:]*|:*) fail 'Cannot determine free eMMC sectors' ;; esac
+		[ "$((last - first + 1))" -gt 2097152 ] || fail 'No free extent larger than 1 GiB'
+		sgdisk -n "0:$first:$last" -c 0:storage -t 0:1B1720DA-A8BB-4B6F-92D2-0A93AB9609CA "$disk" || fail 'Creating storage partition failed'
+		partprobe "$disk" || fail 'Kernel partition refresh failed'
+		storage=$(partition_named storage) || fail 'Cannot locate new storage partition'
+		created=1
+	fi
+	check_partition "$storage"
+	sectors=$(cat "/sys/class/block/${storage##*/}/size") || fail "Cannot read size of $storage"
+	[ "$sectors" -gt 2097152 ] || fail "$storage is not larger than 1 GiB; leaving it untouched"
+	type=$(filesystem "$storage")
+	if [ "$created" -eq 1 ] && [ -z "$type" ]; then
+		mkfs.ext4 -L storage "$storage" || fail 'Creating storage filesystem failed'
+		type=$(filesystem "$storage")
+	fi
+	[ "$type" = ext4 ] || fail "$storage is not ext4; existing partitions are never formatted"
+	uuid=$(blkid -p -s UUID -o value "$storage") || fail "Cannot read UUID on $storage"
+	[ -n "$uuid" ] || fail "No UUID on $storage"
+	source=$(awk -v path="$target" '$2 == path {print $1}' /proc/mounts)
+	if [ "$source" != "$storage" ]; then
+		[ -z "$source" ] || fail "$target is occupied by $source; stop Docker and migrate its data first"
+		mkdir -p "$target" || fail "Cannot create $target"
+		entries=$(find "$target" -mindepth 1 -maxdepth 1 -print) || fail "Cannot inspect $target"
+		[ -z "$entries" ] || fail "$target contains data; migrate it before mounting"
+		previous=$(awk -v dev="$storage" '$1 == dev {print $2}' /proc/mounts)
+		[ -z "$previous" ] || umount "$previous" || fail "Cannot unmount $previous"
+		mount -t ext4 -o rw,noatime "$storage" "$target" || fail "Cannot mount $storage at $target"
+	fi
+	keep_section=mountdocker keep_uuid=$uuid keep_device=$storage
+	config_load fstab || fail 'Cannot load fstab'
+	config_foreach remove_duplicate mount || fail 'Cannot inspect fstab mounts'
+	uci set fstab.mountdocker=mount || fail 'Cannot configure storage mount'
+	uci -q delete fstab.mountdocker.device || true
+	uci -q delete fstab.mountdocker.label || true
+	if ! { uci set "fstab.mountdocker.uuid=$uuid" &&
+		uci set "fstab.mountdocker.target=$target" &&
+		uci set fstab.mountdocker.fstype=ext4 &&
+		uci set fstab.mountdocker.options=rw,noatime &&
+		uci set fstab.mountdocker.enabled=1 &&
+		uci commit fstab; }; then
+		fail 'Cannot save storage mount configuration'
+	fi
+	logger -t arthur-storage "$storage mounted at $target; existing filesystem preserved"
+}
+
+prepare_swap() {
+	local part type where temporary=0 uuid entries
+	part=$(partition_named swap) || fail 'Cannot locate swap partition'
+	[ -n "$part" ] || { logger -t arthur-storage 'No swap partition; leaving zram unchanged'; return 0; }
+	check_partition "$part"
+	type=$(filesystem "$part")
+	case "$type" in
+		swap) : ;; # Keep an existing swap signature/UUID, including active swap.
+		ext4)
+			where=$(awk -v dev="$part" '$1 == dev {print $2}' /proc/mounts)
+			if [ -z "$where" ]; then
+				where=/tmp/arthur-swap-check
+				mkdir -p "$where" || fail "Cannot create $where"
+				mount -t ext4 -o ro "$part" "$where" || fail "Cannot inspect $part"
+				temporary=1
+			fi
+			# The factory's empty ext4 placeholder may be converted; never erase files.
+			entries=$(find "$where" -mindepth 1 -maxdepth 2 ! -path "$where/lost+found" -print) || fail "Cannot inspect files on $part"
+			if [ -n "$entries" ]; then
+				[ "$temporary" -eq 0 ] || umount "$where"
+				fail "$part contains files; refusing to replace it with swap"
+			fi
+			umount "$where" || fail "Cannot unmount $part before swap initialization"
+			mkswap -L swap "$part" || fail "Cannot initialize swap on $part"
+			;;
+		'') mkswap -L swap "$part" || fail "Cannot initialize swap on $part" ;;
+		*) fail "$part has unexpected filesystem $type; leaving it untouched" ;;
+	esac
+	[ "$(filesystem "$part")" = swap ] || fail "Swap signature not recognized on $part"
+	# BusyBox mkswap may create a valid swap signature without a UUID.
+	uuid=$(blkid -p -s UUID -o value "$part" 2>/dev/null || true)
+	keep_section=arthur_swap keep_uuid=$uuid keep_device=$part
+	config_load fstab || fail 'Cannot load fstab'
+	config_foreach remove_duplicate swap || fail 'Cannot inspect fstab swap entries'
+	uci set fstab.arthur_swap=swap || fail 'Cannot configure swap'
+	uci -q delete fstab.arthur_swap.label || true
+	uci set "fstab.arthur_swap.device=$part" || fail 'Cannot configure swap device'
+	if [ -n "$uuid" ]; then
+		uci set "fstab.arthur_swap.uuid=$uuid" || fail 'Cannot configure swap UUID'
+	else
+		uci -q delete fstab.arthur_swap.uuid || true
+	fi
+	uci set fstab.arthur_swap.enabled=1 || fail 'Cannot enable swap in fstab'
+	# Keep disk swap below the existing zram priority (100).
+	uci set fstab.arthur_swap.priority=10 || fail 'Cannot set swap priority'
+	uci commit fstab || fail 'Cannot save swap configuration'
+	awk -v dev="$part" '$1 == dev {found=1} END {exit !found}' /proc/swaps || swapon -p 10 "$part" || fail "Cannot activate swap on $part"
+	logger -t arthur-storage "$part enabled as swap; zram unchanged"
+}
+
+[ -b "$disk" ] || fail "Missing eMMC: $disk"
+# shellcheck source=/dev/null
+# uci-defaults sources files on the left of &&, which suppresses set -e.
+# Critical operations above therefore check their status explicitly.
+. /lib/functions.sh || fail 'Cannot load OpenWrt configuration helpers'
+[ -f /etc/config/fstab ] || block detect > /etc/config/fstab || fail 'Cannot create fstab'
+prepare_storage
+prepare_swap

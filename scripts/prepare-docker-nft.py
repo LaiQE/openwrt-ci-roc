@@ -3,6 +3,13 @@
 from pathlib import Path
 
 
+# The imported generic script misidentifies mmcblk0boot1 as the new partition.
+# Install the Arthur-specific initializer as part of the dockerd package.
+initializer = Path(__file__).resolve().parent.parent / 'files/etc/uci-defaults/dockerd'
+Path('feeds/packages/utils/dockerd/files/dockerd.uci-defaults').write_bytes(
+    initializer.read_bytes())
+
+
 def replace_once(filename, old, new):
     path = Path(filename)
     text = path.read_text()

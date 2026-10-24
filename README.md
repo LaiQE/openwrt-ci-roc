@@ -31,7 +31,7 @@
 - **Argon**：使用 [jerrykuku/luci-theme-argon](https://github.com/jerrykuku/luci-theme-argon) 最新 master，当前为 3.1.0。原作者已包含新的弹窗及稳定版兼容修复；3.x 自带「系统 → Argon 配置」，不再同时编译会产生文件冲突的旧独立配置插件。没有加入自行编写的主题样式补丁。
 - **AdGuard Home**：恢复原来的 [kenzok8/openwrt-packages](https://github.com/kenzok8/openwrt-packages) 完整界面，默认 UCI、YAML 和配置模板保持来源原样。仅保留 LuCI/APK/fw4 必要兼容修改，以及避免两个同名核心服务重复启动的处理；默认配置为 `/etc/config/AdGuardHome`、`/etc/AdGuardHome.yaml`，管理端口 3000。
 - **Tailscale**：恢复 [asvow/luci-app-tailscale](https://github.com/asvow/luci-app-tailscale) 界面，核心仍更新。按原项目方式由界面包提供 init/UCI，避免与核心包重复安装相同文件。
-- **Docker/Dockerman**：从 [ysuolmai/openwrt-packages](https://github.com/ysuolmai/openwrt-packages) 的 main 分支引入原生 nftables 引擎配方及 Lua 界面，保留 Docker 一级菜单；配套库来自 ImmortalWrt openwrt-24.10，沿用 API v1.40 修正。Docker/CLI 29.6.2、containerd 2.2.6 与当前 runc/tini 配套。全新安装默认关闭，手动启动也初始化 fw4 和访问控制。按用户要求内置来源原样的自动分区脚本；去掉清空旧用户规则的迁移逻辑。原生 nftables 后端仍属 Docker 实验功能，不用于 Swarm。
+- **Docker/Dockerman**：从 [ysuolmai/openwrt-packages](https://github.com/ysuolmai/openwrt-packages) 的 main 分支引入原生 nftables 引擎配方及 Lua 界面，保留 Docker 一级菜单；配套库来自 ImmortalWrt openwrt-24.10，沿用 API v1.40 修正。Docker/CLI 29.6.2、containerd 2.2.6 与当前 runc/tini 配套。全新安装默认关闭，手动启动也初始化 fw4 和访问控制。自动分区改用下述亚瑟初始化脚本；去掉清空旧用户规则的迁移逻辑。原生 nftables 后端仍属 Docker 实验功能，不用于 Swarm。
 - **WOL+**：使用支持现代 LuCI 的 sakura-builder1 维护版本。WireGuard 使用最新上游的原生协议与状态页。
 - **Homebox**：使用 jjm2473/openwrt-apps 当前上游配方、服务和默认配置；只补构建所需的 Go 工具路径，不再替换后端或自行重写运行服务。
 - **PassWall**：来自 Openwrt-Passwall 维护仓库；Sing-box 显式启用 QUIC/UTLS/gRPC/WireGuard，提供 TUIC/Hysteria2 支持，另内置独立 Hysteria2 核心。
@@ -75,21 +75,27 @@ Windows PowerShell，在仓库根目录执行：
 本地和 Actions 都跟踪配置分支；若主仓库已更新，本地会要求使用新容器/卷，避免混用旧工具链。
 
 `artifacts/` 为已忽略的导出目录，包含固件、校验文件、manifest、实际配置、diffconfig、
-源码提交和日志。构建会核对显式配置、首次启动 LAN/DHCP，以及必要包是否实际装入。
+源码提交和日志。构建会核对显式配置、首次启动 LAN/DHCP、磁盘初始化保护逻辑，以及必要包和正确版本的初始化脚本是否实际装入。
 按用户要求不再进行 AdGuard Home 专项或本地主题界面测试。
 
-2026-10-25 03:18 的 Podman 构建及上述校验全部通过，最终退出码 0；
+2026-10-25 07:56 的 Podman 构建及上述校验全部通过，最终退出码 0；
 仅生成亚瑟 factory/sysupgrade 镜像，内置 480 个包。导出后的镜像 SHA-256 已复核。
-原生 nftables Docker、Lua 界面、默认关闭、原样自动分区、ULA 与页脚调整均已编入。
-编译出的引擎在隔离 chroot 中通过配置校验；容器实际转发和磁盘分区待用户刷机验证。
+原生 nftables Docker、Lua 界面、默认关闭、亚瑟自动分区/挂载与 swap 修复、ULA 和页脚调整均已编入。
+编译出的引擎在隔离 chroot 中通过配置校验；容器实际转发尚待验证。
+已从最终 sysupgrade 的 squashfs 中逐字核对分区脚本；本轮新镜像待用户烧录验证。
 
 ## 磁盘与维护
 
-按用户最后确认，内置 Docker 来源原样的 `/etc/uci-defaults/dockerd`。
-首次启动若 `/opt/docker` 尚未挂载且没有 `fstab.mountdocker`，会选择第一块磁盘，
-检测到约 1GB 以上未分配空间后创建数据分区、格式化为 ext4，并挂载到 `/opt/docker`。
-它处理磁盘存储，独立于 Docker 的自启开关；没有添加亚瑟专用识别或重写分区算法。
-刷机前备份磁盘数据；64GB/128GB 真机自动分区行为尚待验证。
+`files/etc/uci-defaults/dockerd` 仅处理亚瑟的 `/dev/mmcblk0`，构建时替换 Docker 包内的初始化脚本：
+
+- 优先复用已有 `storage` 分区；没有该标签时，复用已有第 27 分区。分区必须**大于 1GiB**且为 ext4，挂载到 `/opt/docker`，按 UUID 写入 fstab；不重新格式化已有分区。
+- 没有数据分区时，先备份并用 `sgdisk -e` 修复 GPT 尾部位置，再使用实际剩余扇区创建 `storage`。仅格式化本次新建且无文件系统的分区，适应 64GB/128GB 容量。
+- 保留有效的 swap；将标签为 `swap` 的空白分区或空 ext4 占位分区初始化为交换空间。有文件时拒绝格式化。eMMC swap 优先级 10，保留更高优先级的 zram。
+- 已有 Docker 数据阻挡挂载时停止并记录日志，须先迁移数据；失败返回非零，保留初始化脚本供重试。磁盘初始化独立于 Docker 自启开关。
+
+当前 64GB 真机已完成创建、挂载、Docker 数据迁移和 swap 修复；未挂载分区的复用、重复执行、fstab 重新启用 swap 均已验证。64GB/128GB 稀疏镜像验证了分区算法，原有 26 个 GPT 条目保持不变；128GB 尚未真机测试。
+实机备份保存在本机已忽略的 `.local/arthur-storage-backup/`；仍应在刷机前备份磁盘数据。
+隔离逻辑检查：`python3 tests/storage/checks.py`（需要 Bash）。
 
 [AI 交接说明](docs/AI_HANDOFF.md) · [简短调试记录](docs/DEBUG_NOTES.md) · [项目约定](AGENTS.md)
 

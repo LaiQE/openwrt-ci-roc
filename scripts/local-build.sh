@@ -84,6 +84,7 @@ case "$STAGE" in
         prepare
         make download -j"$JOBS"
         make -j"$JOBS" V=s
+        python3 "$WORKSPACE/tests/storage/checks.py"
         python3 "$WORKSPACE/tests/network/first-boot-checks.py" \
             "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
         python3 "$WORKSPACE/tests/firmware/checks.py" \

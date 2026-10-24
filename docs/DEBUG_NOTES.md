@@ -41,6 +41,17 @@
 - 03:18 完整构建与网络/固件检查退出码 0，共 480 个内置包，镜像已导出并复核 SHA-256。自动分区脚本与导入来源逐字节一致。
 - 额外运行 dockerd --validate 时，PRoot 对 faccessat2 的路径仿真导致 docker-proxy 查找失败；在真实 chroot 加 QEMU 环境下校验通过，无需修改引擎默认参数。
 
+## 亚瑟 eMMC 分区与 swap 修复
+
+- 03:18 镜像的来源脚本未能扩容：64GB eMMC 的 GPT 尾部仍指向约 3.9GB，parted 无法按 100% 使用剩余空间；脚本还会把 mmcblk0boot1 当作新分区。失败后仍 exit 0，导致首次启动脚本被删除。Docker 的 overlay 自绑定也会使原挂载检测误判。
+- 按用户提供的 sgdisk 方案修复 GPT 并创建 storage；64GB 实机新增 p27，原 26 个 GPT 条目逐字节保持不变。新分区 ext4 挂载 /opt/docker，迁移并核对原 Docker 数据，保留旧 overlay 副本 /opt/docker-overlay-backup。分区表及数据备份已下载至忽略目录 .local/arthur-storage-backup。
+- 初始化脚本写入仓库并装入 dockerd 包：先找 storage，再复用已有 p27；必须大于 1GiB，已有分区不格式化。没有时才创建新分区。对尚未迁移的挂载点数据拒绝覆盖，错误保留脚本重试。
+- 实机 p26 标签为 swap，但实际是空 ext4；确认只有空 lost+found 后转为 512MiB swap，写入 fstab，优先级 10，zram 100 保留。已有有效 swap 不重复 mkswap；含数据的 ext4 占位分区拒绝转换。BusyBox mkswap 不生成 UUID，需支持 fstab 按设备启用。
+- 实机 BusyBox find 没有 -quit，脚本使用兼容选项；lib/functions.sh 不兼容 set -u，按 OpenWrt 方式使用 set -e。Docker 启动为异步，等待 API 就绪后确认 0 容器、0 镜像及 /opt/docker 根目录正常，自启仍为 0。
+- 编译前复查补齐 uci-defaults 条件 source 的兼容：这种调用方式会抑制 set -e，关键操作改为显式检查失败，避免挂载或配置保存失败后仍删除脚本。隔离测试模拟该调用方式，覆盖挂载和配置提交错误，接入本地与 Actions 流水线。
+- 64GB/128GB 稀疏镜像以实际 ARM64 sgdisk 验证新算法，均保留原 26 个 GPT 条目。隔离逻辑检查覆盖创建、旧 p27 标签差异、容量门槛、重复运行、swap 数据保护和挂载失败。真机验证了未挂载 p27 的自动挂载、文件/UUID 保留及 block mount 重新启用 swap。128GB 尚未真机测试。
+- 07:56 完整构建及分区、网络、固件校验全部通过，退出码 0，仍为 480 个包。factory 为 165007894 字节，sysupgrade 为 164546833 字节；已导出并复核 SHA-256。另从最终 sysupgrade 的 squashfs 直接核对了初始化脚本。新镜像待用户烧录，未自动刷机；本次未运行 GitHub Actions。
+
 来源：
 [LibWrt Wi-Fi 说明](https://github.com/LiBwrt/LibWrt/issues/167)、
 [Argon 弹窗修复](https://github.com/jerrykuku/luci-theme-argon/commit/1055e79)、

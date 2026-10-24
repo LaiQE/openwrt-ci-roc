@@ -11,7 +11,7 @@ origin 是 LaiQE/openwrt-ci-roc，默认分支 my。
 
 固件源码为 LiBwrt/LibWrt 的 25.12-nss，Linux 6.12。
 采用 NSS 固件 11.4.0.5 Release 6，开启 ath11k NSS/Mesh 和亚瑟可用 NSS 管理模块；
-不强开上游 BROKEN 模块。配置为 512MiB；按用户最新要求内置来源原样的磁盘自动分区脚本。
+不强开上游 BROKEN 模块。配置为 512MiB；磁盘初始化按用户确认的 sgdisk 方案处理，保留已有分区数据。
 
 用户确认保留原有默认 Wi-Fi、Zsh、ttyd root 免登录、BusyBox lsusb、原工具列表、
 Build by LaiQE 署名。编译优化与 nlbwmon 刷新使用上游默认。
@@ -31,11 +31,12 @@ WireGuard、ZeroTier、Tailscale、L2TP、FRP、WOL+、Homebox、DDNS-Go、SRun 
 | scripts/prepare-docker-nft.py | nftables Docker 的 APK、手动启动和旧规则兼容 |
 | files/etc/uci-defaults/99-arthur-defaults | LAN 前缀、主机名、时区及原 Shell/终端设置 |
 | files/etc/uci-defaults/98-arthur-adguardhome | 避免核心包小写服务与 LuCI 大写服务重复启动 |
+| files/etc/uci-defaults/dockerd | 亚瑟 eMMC 自动分区/复用、/opt/docker 挂载、swap 修复 |
 | files/etc/modules.d/ath11k | nss_offload=1 frame_mode=2 |
 | package/luci-app-srun-autologin | 离线 SRun 程序、界面、procd、GPL 来源归档 |
 | scripts/Build-Local.ps1、scripts/local-build.sh | Windows/Podman 构建 |
 | .github/workflows/Arthur-LibWrt.yml | 日常 Actions 入口，单独亚瑟 manifest |
-| tests/network、tests/firmware、tests/srun-autologin | 首次启动、固件内容、SRun 检查 |
+| tests/network、tests/firmware、tests/storage、tests/srun-autologin | 首次启动、固件内容、分区保护逻辑、SRun 检查 |
 
 ## 组件兼容要点
 
@@ -45,7 +46,10 @@ WireGuard、ZeroTier、Tailscale、L2TP、FRP、WOL+、Homebox、DDNS-Go、SRun 
 - AdGuard Home 使用 kenzok8/openwrt-packages 完整界面和 feeds 核心。UCI、YAML、模板按来源原样保留；此前删除模板的改动已撤回。仅保留 luci-compat、镜像安装脚本保护、fw4 标记和重复服务兼容处理。按用户要求不做专项运行测试。
 - Tailscale 恢复 asvow 界面（来源本身已在 VPN 菜单）。按旧项目方式去除核心包重复安装的 init/UCI，核心版本继续更新。
 - 原生 nftables dockerd 和 Lua Dockerman 来自 ysuolmai/openwrt-packages:main；配套库来自 ImmortalWrt openwrt-24.10，保留 API v1.40 修正。Docker/CLI 29.6.2、containerd 2.2.6 对齐官方配套版本，源码 SHA-256 已记录；导入包中的 PKG_HASH=skip 不保留。
-- 用户最新要求按来源原样内置 dockerd.uci-defaults：选择第一块磁盘，约 1GB 以上未分配空间创建 ext4 数据分区，挂载 /opt/docker；该脚本独立于 Docker 自启开关。此前手动分区的约定已被这次要求替代，64GB/128GB 真机分区尚未验证。
+- 来源旧分区脚本在真机失败：GPT 尾部仍是旧容量，且按 lsblk 最后一行错误选中 mmcblk0boot1。已换成 files/etc/uci-defaults/dockerd，由 prepare-docker-nft.py 装入包内。仅处理亚瑟 mmcblk0，优先复用 storage 或已有 p27，大于 1GiB 的 ext4 才挂载 /opt/docker；没有时用 sgdisk 修复 GPT 并创建，仅格式化本次新建分区。现有分区、文件系统和数据不得重复格式化。
+- swap 标签分区若已是有效 swap 则直接复用；仅空白或空 ext4 占位分区可 mkswap，有文件则拒绝。BusyBox mkswap 没有生成 UUID 时，fstab 使用明确设备名。eMMC swap 优先级 10，保留 zram 100；不重建其他系统分区。
+- 挂载写入 fstab，已有 overlay Docker 数据须先迁移，不能直接覆盖挂载点。失败返回非零，供 uci-defaults 后续重试；Docker 出厂默认关闭的策略不变。
+- uci-defaults 在条件语句中 source 脚本，会抑制 set -e；分区、格式化、挂载和配置保存必须显式处理错误。tests/storage/checks.py 按该真实调用方式测试，已接入本地和 Actions 校验；不要只用直接执行脚本来判断错误处理有效。
 - 移除清空 DOCKER-USER 的自动旧规则清理。手动启动必须执行 uciadd 建立 fw4 转发，Dockerman ACL 不再依赖开机自启开启。NFT 后端仍为实验功能、不支持 Swarm；尚未真机验证容器转发。
 - Docker 全新安装/恢复出厂默认不自启；99-arthur-defaults 关闭未明确开启的自启，Dockerman 初始化只重启已启用的 dockerd，避免首次启动绕过开关。已有 auto_start=1 保留。
 - WOL+ 使用 sakura-builder1 的现代 LuCI 版本；WireGuard 使用当前上游原生协议与状态页。
@@ -70,10 +74,10 @@ LAN 必须保留 192.168.233.1/24，裸地址会按 /32 解析并使 DHCP 池为
 测试用真实 ARM64 用户态、隔离 /etc 和 /tmp 验证首次启动；测试环境需先创建 /tmp/lock。
 按用户要求，停止 AdGuard Home 专项和本地主题 UI 测试；构建、配置、LAN/DHCP 和包列表仍检查。
 构建启动、make defconfig 或镜像文件存在均不等于全部验证成功，以最终退出码为准。
-2026-10-25 03:18 本次 Podman 构建、首次启动网络和固件校验全部通过（退出码 0），
-内置 480 个包；导出的两个镜像校验一致。原生 nftables Docker、原样自动分区及其他定制均已编入。
+2026-10-25 07:56 最新 Podman 构建、分区保护、首次启动网络和固件校验全部通过（退出码 0），
+内置 480 个包；导出的两个镜像校验一致。原生 nftables Docker、亚瑟分区/挂载和 swap 修复及其他定制均已编入；从最终 sysupgrade 的 squashfs 中逐字核对了初始化脚本。
 引擎在真实 chroot 中通过 --validate；PRoot 对 faccessat2 的仿真曾导致找不到 docker-proxy 的假错误。
-本次原生 nftables 容器转发及磁盘自动分区尚未真机验证。
+原生 nftables 容器转发尚未验证。已修复当前 64GB 真机：p27 挂载 /opt/docker，迁移原 Docker 数据，p26 启用 512MiB swap；未挂载 p27 复用、重复执行和 fstab 重新激活 swap 均通过，原 26 个 GPT 条目未变。64GB/128GB 稀疏镜像验证实际 ARM64 sgdisk 算法，128GB 尚未真机测试。07:56 新镜像已包含修复，尚未烧录该轮镜像；03:18 的旧镜像没有这些修复。
 本次尚未实际运行 GitHub Actions。
 
 artifacts/、.local/ 和缓存不提交；不要将旧诊断模块或临时测试服务放入固件。

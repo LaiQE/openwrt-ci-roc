@@ -79,10 +79,25 @@ assert not (root / 'usr/share/luci/menu.d/luci-app-dockerman.json').exists()
 docker_config = (root / 'etc/config/dockerd').read_text()
 assert "option firewall_backend 'nftables'" in docker_config
 partition_script = (root / 'etc/uci-defaults/dockerd').read_text()
-assert 'NEWPART /dev/$disk' in partition_script
-assert 'mkfs.ext4 -F -L "docker"' in partition_script
-for program in ('parted', 'lsblk', 'mkfs.ext4', 'block'):
-    assert any((root / folder / program).is_file()
+expected_initializer = Path(__file__).resolve().parents[2] / 'files/etc/uci-defaults/dockerd'
+assert partition_script == expected_initializer.read_text(), 'Stale disk initializer'
+
+
+def image_file(path):
+    # APK alternatives can use absolute links (flock -> /usr/bin/util-linux-flock).
+    # Resolve those inside the firmware, rather than against the build host.
+    for _ in range(16):
+        if not path.is_symlink():
+            return path.is_file()
+        destination = Path(os.readlink(path))
+        path = (root / destination.relative_to('/') if destination.is_absolute()
+                else path.parent / destination)
+    return False
+
+
+for program in ('sgdisk', 'partprobe', 'lsblk', 'mkfs.ext4', 'blkid',
+                'block', 'flock', 'mkswap', 'swapon'):
+    assert any(image_file(root / folder / program)
                for folder in ('bin', 'sbin', 'usr/bin', 'usr/sbin')), program
 docker_helper = (root / 'etc/init.d/dockerman').read_text()
 assert 'NFT_TABLE="dockerman"' in docker_helper

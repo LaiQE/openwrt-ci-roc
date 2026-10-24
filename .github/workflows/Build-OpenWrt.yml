@@ -316,6 +316,7 @@ jobs:
       if: ${{ inputs.config_file == 'configs/Arthur.config' }}
       run: |
         sudo -E apt-get -y install qemu-user proot
+        python3 "$GITHUB_WORKSPACE/tests/storage/checks.py"
         python3 "$GITHUB_WORKSPACE/tests/network/first-boot-checks.py" \
           "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
         python3 "$GITHUB_WORKSPACE/tests/firmware/checks.py" \
