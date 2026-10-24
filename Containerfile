@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gettext git libncurses-dev libssl-dev python3 python3-setuptools \
     python3-pyelftools python3-yaml rsync swig unzip zlib1g-dev file wget \
     curl ca-certificates ccache cmake ninja-build pkgconf patch subversion \
-    time xsltproc zstd libelf-dev libfuse-dev shellcheck jq \
+    time xsltproc zstd libelf-dev libfuse-dev shellcheck jq qemu-user proot \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1001 builder \
     && mkdir -p /work /workspace && chown builder:builder /work

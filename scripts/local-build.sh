@@ -86,6 +86,8 @@ case "$STAGE" in
         prepare
         make download -j"$JOBS"
         make -j"$JOBS" V=s
+        python3 "$WORKSPACE/tests/network/first-boot-checks.py" \
+            "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
         cp -a bin/targets/qualcommax/ipq60xx/. "$BUILD_ROOT/artifacts/"
         ;;
     *) echo "Unknown stage: $STAGE" >&2; exit 1 ;;

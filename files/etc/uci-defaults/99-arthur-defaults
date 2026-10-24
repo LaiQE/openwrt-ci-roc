@@ -1,7 +1,17 @@
 #!/bin/sh
 # Applied once on first boot. Do not repartition or format any storage here.
 [ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = "jdcloud,re-ss-01" ] || exit 0
-uci set network.lan.ipaddr='192.168.233.1'
+# 25.12 stores the netmask in ipaddr; a bare address is parsed as /32.
+lan_ip="$(uci -q get network.lan.ipaddr)"
+lan_netmask="$(uci -q get network.lan.netmask)"
+if [ "$(uci -q get network.lan.proto)" = 'static' ]; then
+	case "$lan_ip:$lan_netmask" in
+		'192.168.1.1/24:'|'192.168.1.1:255.255.255.0'|'192.168.233.1:')
+			uci set network.lan.ipaddr='192.168.233.1/24'
+			;;
+	esac
+fi
+# Leave an administrator's other LAN address/prefix intact on upgrades.
 uci set system.@system[0].hostname='Arthur'
 uci set system.@system[0].zonename='Asia/Shanghai'
 uci set system.@system[0].timezone='CST-8'

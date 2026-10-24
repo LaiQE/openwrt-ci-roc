@@ -33,11 +33,12 @@ WOL+、在线用户、内网测速和系统管理功能均在保留范围内；�
 | `package/luci-app-srun-autologin/` | 本地 SRun 程序、LuCI 页面、配置、procd 服务与来源记录 |
 | `package/homebox/` | 官方 Homebox 0.1.3 ARM64 musl 发布包的配方及 procd 服务 |
 | `tests/srun-autologin/` | SRun 静态检查及模拟网络环境的运行测试 |
+| `tests/network/first-boot-checks.py` | 使用实际 ARM64 用户态验证网络初始化、DHCP 地址池及升级保留网段；需 QEMU/proot |
 | `docs/SRUN.md` | SRun 默认值及使用方法 |
 | `docs/NSS-L2TP.md` | 旧版 NSS/L2TP 崩溃的源码核对结果及真机复现资料 |
 
 上游 `General.config`、`Roc-script.sh`、其他机型配置及工作流保持原样。
-通用 `Build-OpenWrt.yml` 仅增加可选定制输入（配置、脚本、LAN 地址）及亚瑟验证；
+通用 `Build-OpenWrt.yml` 增加可选定制输入（配置、脚本、LAN 地址）及亚瑟配置/首次启动验证；
 其默认值仍与上游一致，独立 `Arthur-ImmortalWrt.yml` 传入本项目定制文件。
 上游批量入口保留，但定时触发在本仓库关闭，避免自动构建其他机型。
 
@@ -101,10 +102,14 @@ SRun 内置已核对官方 SHA-256 的 0.6.2 AArch64 musl 程序，首次离线�
 - 配置校验、ShellCheck、PowerShell/JavaScript/YAML 语法和 SRun 模拟运行测试已通过。
 - 最新 Xray/Tailscale 要求 Go 1.27（Tailscale 至少 1.27.3），已在版本覆盖中升级 Go 并切换默认主机编译器。
 - 更改 Go 默认版本后必须刷新代理包的 Makefile 时间戳，否则包扫描缓存仍依赖旧 Go；版本覆盖脚本已处理，避免并行构建时找不到新工具链。
+- 首版 25.12 定制脚本将 LAN 的 `192.168.1.1/24` 覆盖成裸地址，且新版没有独立 netmask，netifd 按 `/32` 解析，导致 DHCP 地址池为空、有线和无线 LAN 均不可用。已改为 `192.168.233.1/24`，并在升级时保留其他自定义 LAN 网段。
+- 新增的首次启动测试会在临时 `/etc` 和 `/tmp` 中运行实际 ARM64 配置生成、网络迁移及定制脚本，再验证 DHCP 池和 dnsmasq 配置。旧脚本已确认失败，修复版通过；本地与 Actions 的亚瑟构建均已接入检查。
+- 网络故障排查还检查了 125 个动态链接及 9 个静态 ARM64 程序，未发现缺库/架构问题。在隔离容器网络使用实际 dnsmasq 2.93 完成 DHCP Discover/Offer/Request/ACK，地址、`/24` 掩码及网关均正确；这不能代替真机网口/无线验证。
+- DHCP 修复版于 2026-10-24 19:19（Asia/Shanghai）完成 Podman 编译，退出码 0，自动首次启动网络测试通过；已直接读取 sysupgrade 的 SquashFS，确认镜像内包含修复脚本。导出修复版位于 `artifacts/dhcp-fixed/`，旧首版镜像不要继续使用。
 - 2026-10-24 本机 Podman 完整编译通过（最终退出码 0）；89 项显式配置、475 个内置包符号均通过校验，实际 manifest 为 447 个包，仅生成亚瑟 factory/sysupgrade 镜像。
 - 最终镜像 SHA-256、必要功能包、USB 3.0/存储/UAS、SRun 默认值和权限、开机服务已核验。实际 ARM64 Sing-box/Xray/Hysteria 已在 QEMU 运行，TUIC/Hysteria2 配置解析通过；Homebox 0.1.3 网页及 ping/上传/下载接口通过。
 - rootfs 为 130.5MiB，内核为 5.31MiB（上游 6MiB 内核布局）。刷机前核对系统分区容量；整盘 64GB/128GB 不等于 rootfs 分区大小。
-- 尚未进行真机刷写、NSS/L2TP 连接及稳定性测试，也未实际运行 GitHub Actions；云端工作流已通过 actionlint 静态检查。
+- 用户首版真机测试发现 LAN/DHCP 故障，修复版尚待重新刷机确认；NSS/L2TP 连接及稳定性仍待实测。尚未实际运行 GitHub Actions，云端工作流已通过 actionlint 静态检查。
 
 GitHub 仓库为 `LaiQE/openwrt-ci-roc`，默认分支 `my`；`origin` 指向个人仓库，
 `upstream` 指向编译项目上游。完整构建通过后再整理并正常推送，可保留上游合并历史。
