@@ -123,6 +123,54 @@ with tempfile.TemporaryDirectory(prefix='arthur-first-boot-') as temporary:
     # Fresh defaults disable Docker in rc.d and in the Dockerman checkbox.
     assert router.get('dockerd.globals.auto_start') == '0'
     assert router.run('/etc/init.d/dockerd', 'enabled', check=False).returncode != 0
+    assert router.get('dockerd.globals.firewall_backend') == 'nftables'
+
+    # Exercise the real manual-start path with procd calls isolated from the
+    # host. It must set up fw4 and generate native nftables daemon settings.
+    daemon = router.etc / 'init.d/dockerd'
+    daemon.write_text(daemon.read_text() + '''
+test_start() {
+    reload_config() { :; }
+    procd_open_instance() { :; }
+    procd_set_param() { :; }
+    procd_close_instance() { :; }
+    start_service
+}
+extra_command test_start "Generate isolated manual-start configuration"
+''')
+    router.run('/etc/init.d/dockerd', 'test_start')
+    docker_json = json.loads((router.tmp / 'dockerd/daemon.json').read_text())
+    assert docker_json['firewall-backend'] == 'nftables', docker_json
+    assert docker_json['iptables'] is True, docker_json
+    assert router.get('firewall.docker_wan.src') == 'docker'
+    assert router.get('firewall.docker_wan.dest') == 'wan'
+
+    # Validate the real ACL generator while autostart stays disabled. Only
+    # daemon status and nft's kernel operations are mocked, not the rules.
+    router.run('/sbin/uci', 'set', 'dockerd.dockerman=dockerman')
+    router.run('/sbin/uci', 'add_list', 'dockerd.dockerman.ac_allowed_interface=br-lan')
+    router.run('/sbin/uci', 'add_list', 'dockerd.dockerman.ac_allowed_ports=8080/tcp')
+    router.run('/sbin/uci', 'commit', 'dockerd')
+    mock_daemon = router.tmp / 'dockerd-status'
+    mock_daemon.write_text('#!/bin/sh\n[ "$1" = running ]\n')
+    mock_daemon.chmod(0o755)
+    helper = router.etc / 'init.d/dockerman'
+    helper.write_text(helper.read_text() + '''
+test_start() {
+    _DOCKERD=/tmp/dockerd-status
+    docker_running() { return 0; }
+    nft() { printf '%s\\n' "$*" >> /tmp/nft-commands; }
+    start_service
+}
+extra_command test_start "Generate isolated access rules"
+''')
+    router.run('/etc/init.d/dockerman', 'test_start')
+    nft_rules = (router.tmp / 'dockerman.nft').read_text()
+    assert 'table inet dockerman' in nft_rules, nft_rules
+    assert 'iifname "br-lan" oifname "docker0" counter accept' in nft_rules
+    assert 'ct original proto-dst 8080 counter accept' in nft_rules
+    assert 'ct state { invalid, new } counter drop' in nft_rules
+    assert router.get('dockerd.globals.auto_start') == '0'
 
     # Repair the exact invalid state shipped by the first 25.12 image.
     router.run('/sbin/uci', 'set', 'network.lan.ipaddr=192.168.233.1')
@@ -160,5 +208,5 @@ with tempfile.TemporaryDirectory(prefix='arthur-first-boot-') as temporary:
 
 print('First-boot checks passed: clean ARM64 initialization, LAN/WAN bridge mapping, '
       'DHCP pool and dnsmasq parsing, broken-state repair, custom subnet retention, '
-      'random/custom ULA retention, Docker default-off and manual opt-in, '
+      'random/custom ULA retention, Docker default-off, manual nftables/fw4 setup and ACL generation, '
       'board guard, LibWrt Wi-Fi NSS enabled at module load')

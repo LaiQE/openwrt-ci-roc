@@ -15,6 +15,23 @@
     "version": "0.71.1",
     "sha256": "079f5fdebfbf8b8fa42c8b03245d169a7b5298697d754d7345ea25f09e496722"
   },
+  "utils/dockerd": {
+    "from": "29.6.2",
+    "version": "29.6.2",
+    "sha256": "8b64afb7562347d2ce9f1027e326ce9a45c8f41a486106ce2034f7eb1abe0e0f",
+    "git_short_commit": "3d80467"
+  },
+  "utils/docker": {
+    "from": "29.6.1",
+    "version": "29.6.2",
+    "sha256": "11aef3484c38d39d291a54a73a4d9dd2bb3c000d9a3fc3862bd03fe899594f2c",
+    "git_short_commit": "dfc4efb"
+  },
+  "utils/containerd": {
+    "from": "2.2.5",
+    "version": "2.2.6",
+    "sha256": "98992d2d2a652bcfaef0186d218c5ff254ba97ea1dd73425fe29be7036b3ac35"
+  },
   "utils/docker-compose": {
     "from": "5.6.0",
     "version": "5.6.1",

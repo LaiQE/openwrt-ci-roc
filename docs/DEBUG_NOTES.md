@@ -31,6 +31,16 @@
 - Docker 关闭/手动开启保留、随机/自定义 ULA 已通过隔离 rootfs 的 ARM64 首次启动模拟；最新页脚替换及重复执行检查、ShellCheck 通过。
 - 清理 base-files、Argon、Dockerman 后重新编译，02:25 完整构建及网络/固件检查退出码 0，仍为 464 个内置包。新镜像已导出并复核 SHA-256，待用户刷机验证；Tailscale 使用未修改的上游 VPN 菜单。
 
+## Docker 原生 nftables 迁移
+
+- 切换到 ysuolmai/openwrt-packages:main 的 dockerd 与 Lua Dockerman，保留独立 Docker 菜单及原有 Lua 客户端的 API v1.40 兼容修正。
+- Docker/CLI 对齐 29.6.2，containerd 对齐官方 Dockerfile 的 2.2.6；runc 1.3.6、tini 0.19.0 保持配套。对官方源码计算 SHA-256，替代导入配方的 PKG_HASH=skip。
+- 维持 Docker 出厂默认关闭；将 fw4 初始化放进手动启动路径，ACL 也支持手动启动且自启关闭的情况。移除会清空 DOCKER-USER 的旧规则自动清理。
+- 用户最后要求保留来源原样的自动分区/格式化脚本，因此取消最初的排除处理；该首启脚本独立于 Docker 是否自启。为更新构建输入主动停止过一轮任务，日志中的退出码 141 对应这次中止。
+- ARM64 隔离测试验证了手动启动的 daemon.json、fw4 出口转发和 nftables ACL 生成；没有执行真实磁盘分区或真机容器转发测试。
+- 03:18 完整构建与网络/固件检查退出码 0，共 480 个内置包，镜像已导出并复核 SHA-256。自动分区脚本与导入来源逐字节一致。
+- 额外运行 dockerd --validate 时，PRoot 对 faccessat2 的路径仿真导致 docker-proxy 查找失败；在真实 chroot 加 QEMU 环境下校验通过，无需修改引擎默认参数。
+
 来源：
 [LibWrt Wi-Fi 说明](https://github.com/LiBwrt/LibWrt/issues/167)、
 [Argon 弹窗修复](https://github.com/jerrykuku/luci-theme-argon/commit/1055e79)、

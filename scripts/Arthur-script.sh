@@ -175,6 +175,7 @@ git_sparse_replace() {
     case "$path" in
       applications/*|collections/*) rm -rf "feeds/luci/$path"; mv "$repo_dir/$path" "feeds/luci/$path" ;;
       luci-app-*) rm -rf "package/$path"; mv "$repo_dir/$path" "package/$path" ;;
+      dockerd) rm -rf feeds/packages/utils/dockerd; mv "$repo_dir/$path" feeds/packages/utils/dockerd ;;
       *) rm -rf "feeds/packages/$path"; mv "$repo_dir/$path" "feeds/packages/$path" ;;
     esac
   done
@@ -246,25 +247,15 @@ if package_enabled docker-compose; then
   git_sparse_replace https://github.com/immortalwrt/packages master utils/docker-compose
 fi
 if package_enabled luci-app-dockerman; then
-  # Keep the maintained Lua UI and its matching client library (top-level Docker menu).
-  # Docker Engine/CLI/Compose still come from the current feeds.
+  # Native nftables daemon and Lua UI; retain the matching Lua client library.
+  # The feed CLI still needs its verified upstream commit helper.
+  git -C feeds/packages show HEAD:utils/dockerd/git-short-commit.sh > feeds/packages/utils/docker/git-short-commit.sh
+  chmod 0755 feeds/packages/utils/docker/git-short-commit.sh
+  rm -rf feeds/luci/applications/luci-app-dockerman
+  git_sparse_replace https://github.com/ysuolmai/openwrt-packages main dockerd luci-app-dockerman
   git_sparse_replace https://github.com/immortalwrt/luci openwrt-24.10 \
-    applications/luci-app-dockerman collections/luci-lib-docker
-  # The Lua client declares v1.40 but otherwise sends unversioned requests. Use
-  # that supported API so new engines retain the response fields the UI needs.
-  python3 - <<'PY'
-from pathlib import Path
-path = Path('feeds/luci/collections/luci-lib-docker/luasrc/docker.lua')
-text = path.read_text()
-needle = '\theader = (http_method or "GET")'
-assert text.count(needle) == 1, 'Unexpected Lua Docker HTTP client layout'
-path.write_text(text.replace(needle, '\tpath = "/" .. options.version .. path\n' + needle))
-path = Path('feeds/luci/applications/luci-app-dockerman/root/etc/uci-defaults/luci-app-dockerman')
-text = path.read_text()
-needle = '/etc/init.d/dockerd restart &\n'
-assert text.count(needle) == 1, 'Unexpected Dockerman first-boot startup'
-path.write_text(text.replace(needle, '/etc/init.d/dockerd enabled && /etc/init.d/dockerd restart &\n'))
-PY
+    collections/luci-lib-docker
+  python3 "$WORKSPACE/scripts/prepare-docker-nft.py"
 fi
 
 if package_enabled luci-app-multi-frpc; then

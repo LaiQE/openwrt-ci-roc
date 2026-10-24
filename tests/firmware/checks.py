@@ -76,6 +76,21 @@ controller = (lua / 'controller/dockerman.lua').read_text()
 assert '"admin", "docker"' in controller
 assert 'path = "/" .. options.version .. path' in (lua / 'docker.lua').read_text()
 assert not (root / 'usr/share/luci/menu.d/luci-app-dockerman.json').exists()
+docker_config = (root / 'etc/config/dockerd').read_text()
+assert "option firewall_backend 'nftables'" in docker_config
+partition_script = (root / 'etc/uci-defaults/dockerd').read_text()
+assert 'NEWPART /dev/$disk' in partition_script
+assert 'mkfs.ext4 -F -L "docker"' in partition_script
+for program in ('parted', 'lsblk', 'mkfs.ext4', 'block'):
+    assert any((root / folder / program).is_file()
+               for folder in ('bin', 'sbin', 'usr/bin', 'usr/sbin')), program
+docker_helper = (root / 'etc/init.d/dockerman').read_text()
+assert 'NFT_TABLE="dockerman"' in docker_helper
+assert 'iptables -' not in docker_helper, 'Old iptables ACL or destructive cleanup retained'
+assert '$($_DOCKERD enabled)' not in docker_helper, 'Manual start would skip access control'
+assert '/etc/init.d/dockerd enabled && /etc/init.d/dockerd restart &' in (
+    root / 'etc/uci-defaults/luci-app-dockerman').read_text()
+assert packages['docker'].split('-r')[0] == packages['dockerd'].split('-r')[0]
 tailscale = json.loads((root / 'usr/share/luci/menu.d/luci-app-tailscale.json').read_text())
 assert 'admin/vpn/tailscale' in tailscale, tailscale
 assert 'admin/services/tailscale' not in tailscale
@@ -95,7 +110,7 @@ assert (root / 'etc/modules.d/ath11k').read_text().split() == [
     'ath11k', 'nss_offload=1', 'frame_mode=2']
 
 print(f'Firmware checks passed: {len(packages)} packages, Arthur only, SHA-256, '
-      'NSS 11.4 managers, requested removals, Lua Docker, integrated Argon, '
+      'NSS 11.4 managers, requested removals, nftables Lua Docker, integrated Argon, '
       'VPN menu, restored tools, offline SRun defaults and Wi-Fi NSS policy')
 for path in images:
     print(f'{path.name}: {path.stat().st_size} bytes')

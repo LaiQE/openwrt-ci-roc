@@ -41,7 +41,8 @@ prepare() {
     fingerprint="$({
         find "$WORKSPACE/configs" "$WORKSPACE/files" "$WORKSPACE/package" \
             -type f -print0 | sort -z | xargs -0 sha256sum
-        sha256sum "$WORKSPACE/scripts/Arthur-script.sh" "$WORKSPACE/scripts/apply-package-updates.py"
+        sha256sum "$WORKSPACE/scripts/Arthur-script.sh" "$WORKSPACE/scripts/apply-package-updates.py" \
+            "$WORKSPACE/scripts/prepare-docker-nft.py"
     } | sha256sum | cut -d' ' -f1)"
     if [ ! -f .prepared ] || [ "$(cat .prepared)" != "$fingerprint" ]; then
         # These feeds are unrelated to the router profile. Keep NSS feeds intact.

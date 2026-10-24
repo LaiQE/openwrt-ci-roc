@@ -31,12 +31,12 @@
 - **Argon**：使用 [jerrykuku/luci-theme-argon](https://github.com/jerrykuku/luci-theme-argon) 最新 master，当前为 3.1.0。原作者已包含新的弹窗及稳定版兼容修复；3.x 自带「系统 → Argon 配置」，不再同时编译会产生文件冲突的旧独立配置插件。没有加入自行编写的主题样式补丁。
 - **AdGuard Home**：恢复原来的 [kenzok8/openwrt-packages](https://github.com/kenzok8/openwrt-packages) 完整界面，默认 UCI、YAML 和配置模板保持来源原样。仅保留 LuCI/APK/fw4 必要兼容修改，以及避免两个同名核心服务重复启动的处理；默认配置为 `/etc/config/AdGuardHome`、`/etc/AdGuardHome.yaml`，管理端口 3000。
 - **Tailscale**：恢复 [asvow/luci-app-tailscale](https://github.com/asvow/luci-app-tailscale) 界面，核心仍更新。按原项目方式由界面包提供 init/UCI，避免与核心包重复安装相同文件。
-- **Dockerman**：从 ImmortalWrt openwrt-24.10 引入 Lua 界面及配套库；修正客户端实际使用 Docker API v1.40，保留新引擎对旧界面所需字段的兼容。Docker、CLI、containerd、runc 保留当前 feeds 配套版本。
+- **Docker/Dockerman**：从 [ysuolmai/openwrt-packages](https://github.com/ysuolmai/openwrt-packages) 的 main 分支引入原生 nftables 引擎配方及 Lua 界面，保留 Docker 一级菜单；配套库来自 ImmortalWrt openwrt-24.10，沿用 API v1.40 修正。Docker/CLI 29.6.2、containerd 2.2.6 与当前 runc/tini 配套。全新安装默认关闭，手动启动也初始化 fw4 和访问控制。按用户要求内置来源原样的自动分区脚本；去掉清空旧用户规则的迁移逻辑。原生 nftables 后端仍属 Docker 实验功能，不用于 Swarm。
 - **WOL+**：使用支持现代 LuCI 的 sakura-builder1 维护版本。WireGuard 使用最新上游的原生协议与状态页。
 - **Homebox**：使用 jjm2473/openwrt-apps 当前上游配方、服务和默认配置；只补构建所需的 Go 工具路径，不再替换后端或自行重写运行服务。
 - **PassWall**：来自 Openwrt-Passwall 维护仓库；Sing-box 显式启用 QUIC/UTLS/gRPC/WireGuard，提供 TUIC/Hysteria2 支持，另内置独立 Hysteria2 核心。
 
-Go、Tailscale、FRP、Compose 的版本覆盖和官方源码 SHA-256 记录在
+Go、Tailscale、FRP、Docker 配套组件及 Compose 的版本覆盖和官方源码 SHA-256 记录在
 `configs/package-updates.json`。实际主仓库、feeds 和第三方提交随本地产物导出。
 
 ## Wi-Fi 与 NSS
@@ -78,15 +78,18 @@ Windows PowerShell，在仓库根目录执行：
 源码提交和日志。构建会核对显式配置、首次启动 LAN/DHCP，以及必要包是否实际装入。
 按用户要求不再进行 AdGuard Home 专项或本地主题界面测试。
 
-2026-10-25 02:25 的 Podman 构建及上述校验全部通过，最终退出码 0；
-仅生成亚瑟 factory/sysupgrade 镜像，内置 464 个包。导出后的镜像 SHA-256 已复核。
-Docker 默认关闭、ULA 保留和页脚调整已编入本次镜像，待用户刷机验证。
+2026-10-25 03:18 的 Podman 构建及上述校验全部通过，最终退出码 0；
+仅生成亚瑟 factory/sysupgrade 镜像，内置 480 个包。导出后的镜像 SHA-256 已复核。
+原生 nftables Docker、Lua 界面、默认关闭、原样自动分区、ULA 与页脚调整均已编入。
+编译出的引擎在隔离 chroot 中通过配置校验；容器实际转发和磁盘分区待用户刷机验证。
 
 ## 磁盘与维护
 
-64GB/128GB eMMC 由用户手动分区，不引入自动格式化或修改 GPT 的脚本。
-刷机前核对系统分区容量；整盘容量不等于 rootfs 分区容量。
-完成数据分区和持久挂载后，再配置 Docker 数据目录。
+按用户最后确认，内置 Docker 来源原样的 `/etc/uci-defaults/dockerd`。
+首次启动若 `/opt/docker` 尚未挂载且没有 `fstab.mountdocker`，会选择第一块磁盘，
+检测到约 1GB 以上未分配空间后创建数据分区、格式化为 ext4，并挂载到 `/opt/docker`。
+它处理磁盘存储，独立于 Docker 的自启开关；没有添加亚瑟专用识别或重写分区算法。
+刷机前备份磁盘数据；64GB/128GB 真机自动分区行为尚待验证。
 
 [AI 交接说明](docs/AI_HANDOFF.md) · [简短调试记录](docs/DEBUG_NOTES.md) · [项目约定](AGENTS.md)
 

@@ -29,5 +29,10 @@ for name, update in updates.items():
     else:
         text = re.sub(r"^PKG_VERSION:=.+$", f"PKG_VERSION:={update['version']}", text, flags=re.M)
     text = re.sub(r"^PKG_HASH:=.+$", f"PKG_HASH:={update['sha256']}", text, flags=re.M)
+    if "git_short_commit" in update:
+        text, count = re.subn(r"^PKG_GIT_SHORT_COMMIT:=.+$",
+                              f"PKG_GIT_SHORT_COMMIT:={update['git_short_commit']}",
+                              text, flags=re.M)
+        assert count == 1, f"{name}: missing source commit metadata"
     recipe.write_text(text)
     print(f"{name}: {update['version']} ({update['sha256']})")
