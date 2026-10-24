@@ -17,12 +17,15 @@ finish() {
     exit "$code"
 }
 trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 141' PIPE
 printf '%s running (pid %s) since %s\n' "$STAGE" "$$" "$(date -Is)" > "$BUILD_ROOT/status"
 date -Is
 # shellcheck source=../configs/source.env
 source "$WORKSPACE/configs/source.env"
 OPENWRT_PATH="$BUILD_ROOT/openwrt"
-seeds=("$WORKSPACE/configs/Arthur.config" "$WORKSPACE/configs/General.config")
+seeds=("$WORKSPACE/configs/Arthur.config" "$WORKSPACE/configs/Arthur-General.config")
 
 prepare() {
     if [ ! -d "$OPENWRT_PATH/.git" ]; then
@@ -41,13 +44,13 @@ prepare() {
     fingerprint="$({
         find "$WORKSPACE/configs" "$WORKSPACE/files" "$WORKSPACE/package" \
             -type f -print0 | sort -z | xargs -0 sha256sum
-        sha256sum "$WORKSPACE/scripts/Roc-script.sh" "$WORKSPACE/scripts/apply-package-updates.py"
+        sha256sum "$WORKSPACE/scripts/Arthur-script.sh" "$WORKSPACE/scripts/apply-package-updates.py"
     } | sha256sum | cut -d' ' -f1)"
     if [ ! -f .prepared ] || [ "$(cat .prepared)" != "$fingerprint" ]; then
         # These feeds are unrelated to the router profile. Keep NSS feeds intact.
         sed -i '/^src-git \(telephony\|video\) /d' feeds.conf.default
         ./scripts/feeds update -a
-        GITHUB_WORKSPACE="$WORKSPACE" bash "$WORKSPACE/scripts/Roc-script.sh" "${seeds[@]}"
+        GITHUB_WORKSPACE="$WORKSPACE" bash "$WORKSPACE/scripts/Arthur-script.sh" "${seeds[@]}"
         printf '%s\n' "$fingerprint" > .prepared
     fi
     configure

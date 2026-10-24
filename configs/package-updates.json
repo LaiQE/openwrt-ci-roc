@@ -1,4 +1,10 @@
 {
+  "lang/golang/golang1.27": {
+    "kind": "go",
+    "from": "1.27.1",
+    "version": "1.27.3",
+    "sha256": "6e7749035cf360f06b2575d162ea79df9fda8ef671889e5c375f8e50777f26bb"
+  },
   "net/tailscale": {
     "from": "1.104.1",
     "version": "1.104.2",

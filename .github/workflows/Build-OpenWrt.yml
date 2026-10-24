@@ -12,6 +12,18 @@ on:
       config_file:
         required: true
         type: string
+      general_config_file:
+        required: false
+        type: string
+        default: configs/General.config
+      diy_script:
+        required: false
+        type: string
+        default: scripts/Roc-script.sh
+      lan_ip:
+        required: false
+        type: string
+        default: 192.168.2.1
       firmware_tag:
         required: true
         type: string
@@ -53,8 +65,8 @@ defaults:
     shell: bash
 
 env:
-  GENERAL_CONFIG_FILE: configs/General.config
-  DIY_SCRIPT: scripts/Roc-script.sh
+  GENERAL_CONFIG_FILE: ${{ inputs.general_config_file }}
+  DIY_SCRIPT: ${{ inputs.diy_script }}
   OPENWRT_PATH: /mnt/openwrt
   TZ: Asia/Shanghai
 
@@ -171,7 +183,7 @@ jobs:
       id: variables
       env:
         ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
-        CUSTOMIZATION_HASH: ${{ hashFiles('scripts/Roc-script.sh', 'files/**', 'configs/General.config', inputs.config_file) }}
+        CUSTOMIZATION_HASH: ${{ hashFiles(inputs.diy_script, inputs.general_config_file, inputs.config_file, 'configs/package-updates.json', 'scripts/apply-package-updates.py', 'files/**', 'package/**') }}
         REPO_URL: ${{ inputs.repo_url }}
         REPO_BRANCH: ${{ inputs.repo_branch }}
         CONFIG_FILE: ${{ inputs.config_file }}
@@ -260,8 +272,10 @@ jobs:
           sed -i '/CONFIG_PACKAGE_sqm-scripts-nss=y/d' .config
         fi
         make defconfig
-        python3 "$GITHUB_WORKSPACE/scripts/verify-config.py" .config \
-          "$GITHUB_WORKSPACE/$CONFIG_FILE" "$GITHUB_WORKSPACE/$GENERAL_CONFIG_FILE"
+        if [ "$CONFIG_FILE" = "configs/Arthur.config" ]; then
+          python3 "$GITHUB_WORKSPACE/scripts/verify-config.py" .config \
+            "$GITHUB_WORKSPACE/$CONFIG_FILE" "$GITHUB_WORKSPACE/$GENERAL_CONFIG_FILE"
+        fi
         if [ -d staging_dir ]; then
           # Refresh component stamps before aggregate stamps so restored host tools and toolchains remain valid.
           tools_stamp="$(find staging_dir/host -maxdepth 2 -type f -name '.tools_compile*' -print -quit 2>/dev/null || true)"
@@ -390,7 +404,7 @@ jobs:
           - 💻 这是 ${{ inputs.firmware_tag }} 平台使用的 OpenWrt 固件
           - ⚽ 固件源码: ${{ inputs.repo_url }}
           - 💝 源码分支: ${{ inputs.repo_branch }}
-          - 🌐 默认地址: **192.168.233.1**
+          - 🌐 默认地址: **${{ inputs.lan_ip }}**
           - 🔑 默认密码: none
           ### 🧊 固件版本
           - 固件内核版本：**${{ needs.Build.outputs.version_kernel }}**

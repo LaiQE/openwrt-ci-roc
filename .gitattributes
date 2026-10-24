@@ -6,10 +6,12 @@ LICENSE text eol=lf
 *.config text eol=lf
 *.md text eol=lf
 *.py text eol=lf
+*.ps1 text eol=lf
+*.json text eol=lf
 *.env text eol=lf
 *.lock text eol=lf
 Containerfile text eol=lf
 package/**/Makefile text eol=lf
-package/luci-app-srun-autologin/files/** text eol=lf
+package/**/files/** text eol=lf
 package/**/prebuilt/** binary
 files/** text eol=lf
