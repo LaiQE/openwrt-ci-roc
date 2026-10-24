@@ -39,9 +39,12 @@ WireGuard、ZeroTier、Tailscale、L2TP、FRP、WOL+、Homebox、DDNS-Go、SRun 
 ## 组件兼容要点
 
 - Argon 使用原作者 jerrykuku 最新 master，目前 3.1.0，带较新的弹窗及稳定版兼容修复。3.x 已整合 Argon 配置页面，不能再同时安装旧独立插件。未找到 LibWrt 官方专用版；sbwml 有 25.12 分支，但较旧且带额外 SPA 改动，本次没有采用。
+- 保留系统概览的 Build by LaiQE；Argon 登录页及主题页脚用署名替换发行版链接，LuCI 信息省略 branch/修订号，保留 Argon 版本。缓存策略保持原样，概览显示过旧时先清理浏览器缓存。
+- LibWrt 的 991_set-network.sh 会删除此前随机生成的 ULA；Arthur-script.sh 仅去掉此删除行，保留随机或管理员设置的前缀，其余初始化保持上游。
 - AdGuard Home 使用 kenzok8/openwrt-packages 完整界面和 feeds 核心。UCI、YAML、模板按来源原样保留；此前删除模板的改动已撤回。仅保留 luci-compat、镜像安装脚本保护、fw4 标记和重复服务兼容处理。按用户要求不做专项运行测试。
 - Tailscale 恢复 asvow 界面（来源本身已在 VPN 菜单）。按旧项目方式去除核心包重复安装的 init/UCI，核心版本继续更新。
 - Lua Dockerman 与配套库来自 ImmortalWrt openwrt-24.10，只修正实际请求 API v1.40；引擎和 Compose 继续使用当前配套版本。曾对真机 Docker 29.6.1 做只读 API 检查。
+- Docker 全新安装/恢复出厂默认不自启；99-arthur-defaults 关闭未明确开启的自启，Dockerman 初始化只重启已启用的 dockerd，避免首次启动绕过开关。已有 auto_start=1 保留。
 - WOL+ 使用 sakura-builder1 的现代 LuCI 版本；WireGuard 使用当前上游原生协议与状态页。
 - Homebox 恢复 jjm2473/openwrt-apps 的配方、init、UCI、默认值，仅修复必要构建兼容。不再维护自写后端替换包。
 - PassWall 来自 Openwrt-Passwall。TUIC 由启用 QUIC 的 Sing-box 提供，Hysteria2 有独立核心；xray-plugin=m、mwan3=m 只生成可选安装包。
@@ -64,8 +67,8 @@ LAN 必须保留 192.168.233.1/24，裸地址会按 /32 解析并使 DHCP 池为
 测试用真实 ARM64 用户态、隔离 /etc 和 /tmp 验证首次启动；测试环境需先创建 /tmp/lock。
 按用户要求，停止 AdGuard Home 专项和本地主题 UI 测试；构建、配置、LAN/DHCP 和包列表仍检查。
 构建启动、make defconfig 或镜像文件存在均不等于全部验证成功，以最终退出码为准。
-2026-10-25 01:43 本次 Podman 构建、首次启动网络和固件校验全部通过（退出码 0），
-内置 464 个包；导出的两个镜像校验一致。本次新版尚未真机烧录。
+2026-10-25 02:25 本次 Podman 构建、首次启动网络和固件校验全部通过（退出码 0），
+内置 464 个包；导出的两个镜像校验一致。Docker/ULA/页脚调整已编入，待用户刷机验证。
 本次尚未实际运行 GitHub Actions。
 
 artifacts/、.local/ 和缓存不提交；不要将旧诊断模块或临时测试服务放入固件。

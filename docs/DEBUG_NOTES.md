@@ -22,6 +22,15 @@
 - LibWrt 实际 manifest 带设备名，Actions 亚瑟入口改用对应文件名；本地复制输入时同步清理已删除文件，避免旧输入残留。
 - 01:43 最终构建及首次启动网络、固件内容校验全部通过，退出码 0，共 464 个内置包。factory 为 164253890 字节，sysupgrade 为 163584273 字节；导出后复核 SHA-256 一致。Argon 3.1.0、AdGuard Home 来源默认设置已编入，新版实际使用效果待用户刷机确认。
 
+## 刷机后调整与二次编译
+
+- 用户确认一次 DHCP 故障为网线误插 WAN，未修改 LAN /24 配置。
+- Docker 默认关闭：首次初始化禁用未明确开启的 dockerd；Dockerman 的初始化重启也遵守自启状态，保留管理员后续的开启选择。
+- ULA 空白来自上游 991_set-network.sh 主动删除，亚瑟定制只移除删除行，保留随机生成和手动设置的前缀。
+- 用户确认清除浏览器缓存后概览署名正常；保留概览实现和缓存策略，页脚用署名替换发行版链接，LuCI 信息去掉 branch/修订号，保留 Argon 版本。
+- Docker 关闭/手动开启保留、随机/自定义 ULA 已通过隔离 rootfs 的 ARM64 首次启动模拟；最新页脚替换及重复执行检查、ShellCheck 通过。
+- 清理 base-files、Argon、Dockerman 后重新编译，02:25 完整构建及网络/固件检查退出码 0，仍为 464 个内置包。新镜像已导出并复核 SHA-256，待用户刷机验证；Tailscale 使用未修改的上游 VPN 菜单。
+
 来源：
 [LibWrt Wi-Fi 说明](https://github.com/LiBwrt/LibWrt/issues/167)、
 [Argon 弹窗修复](https://github.com/jerrykuku/luci-theme-argon/commit/1055e79)、

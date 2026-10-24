@@ -27,5 +27,15 @@ if [ -f /usr/share/vim/vimrc ] && [ ! -f /usr/share/vim/defaults.vim ]; then
 fi
 uci -q set ttyd.@ttyd[0].command='/bin/login -f root'
 uci -q commit ttyd
+# Fresh installations/reset leave Docker stopped; retain an explicit opt-in.
+if [ -x /etc/init.d/dockerd ]; then
+	case "$(uci -q get dockerd.globals.auto_start)" in
+		''|0)
+			/etc/init.d/dockerd disable
+			uci set dockerd.globals.auto_start='0'
+			uci commit dockerd
+			;;
+	esac
+fi
 # Keep Docker data on its upstream default until a data partition is mounted.
 exit 0

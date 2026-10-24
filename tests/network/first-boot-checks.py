@@ -111,12 +111,18 @@ with tempfile.TemporaryDirectory(prefix='arthur-first-boot-') as temporary:
     assert router.get('network.wan.proto') == 'dhcp'
     assert router.get('network.wan.device') == 'wan'
     router.check_pool()
+    ula = ipaddress.IPv6Network(router.get('network.globals.ula_prefix'))
+    assert ula.prefixlen == 48 and ula.subnet_of(ipaddress.IPv6Network('fd00::/8')), ula
     router.run('/bin/busybox', 'lsusb')
     if (root / 'usr/bin/zsh').is_file():
         root_account = next(line for line in (router.etc / 'passwd').read_text().splitlines()
                             if line.startswith('root:'))
         assert root_account.endswith(':/usr/bin/zsh'), root_account
         assert router.get('ttyd.@ttyd[0].command') == '/bin/login -f root'
+
+    # Fresh defaults disable Docker in rc.d and in the Dockerman checkbox.
+    assert router.get('dockerd.globals.auto_start') == '0'
+    assert router.run('/etc/init.d/dockerd', 'enabled', check=False).returncode != 0
 
     # Repair the exact invalid state shipped by the first 25.12 image.
     router.run('/sbin/uci', 'set', 'network.lan.ipaddr=192.168.233.1')
@@ -130,12 +136,29 @@ with tempfile.TemporaryDirectory(prefix='arthur-first-boot-') as temporary:
     router.apply('/tmp/arthur-defaults')
     assert router.get('network.lan.ipaddr') == '10.23.4.1/23'
 
+    # A later administrator opt-in survives a defaults rerun on upgrade.
+    router.run('/etc/init.d/dockerd', 'enable')
+    router.run('/sbin/uci', 'set', 'dockerd.globals.auto_start=1')
+    router.run('/sbin/uci', 'commit', 'dockerd')
+    router.apply('/tmp/arthur-defaults')
+    assert router.get('dockerd.globals.auto_start') == '1'
+    router.run('/etc/init.d/dockerd', 'enabled')
+
+    router.run('/sbin/uci', 'set', 'network.globals.ula_prefix=fd12:3456:789a::/48')
+    router.run('/sbin/uci', 'commit', 'network')
+    router.apply('/etc/uci-defaults/12_network-generate-ula',
+                 '/etc/uci-defaults/991_set-network.sh')
+    assert router.get('network.globals.ula_prefix') == 'fd12:3456:789a::/48'
+
     other = Router(Path(temporary) / 'other', board='example,other-router')
     other.generate()
+    other.apply('/etc/uci-defaults/12_network-generate-ula')
+    assert other.get('network.globals.ula_prefix') != str(ula)
     before = (other.etc / 'config/network').read_bytes()
     other.apply('/tmp/arthur-defaults')
     assert (other.etc / 'config/network').read_bytes() == before
 
 print('First-boot checks passed: clean ARM64 initialization, LAN/WAN bridge mapping, '
       'DHCP pool and dnsmasq parsing, broken-state repair, custom subnet retention, '
+      'random/custom ULA retention, Docker default-off and manual opt-in, '
       'board guard, LibWrt Wi-Fi NSS enabled at module load')

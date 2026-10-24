@@ -80,6 +80,12 @@ tailscale = json.loads((root / 'usr/share/luci/menu.d/luci-app-tailscale.json').
 assert 'admin/vpn/tailscale' in tailscale, tailscale
 assert 'admin/services/tailscale' not in tailscale
 assert 'Build by LaiQE' in (root / 'www/luci-static/resources/view/status/include/10_system.js').read_text()
+argon = root / 'usr/share/ucode/luci/template/themes/argon'
+for filename in ('footer.ut', 'footer_login.ut'):
+    footer = (argon / filename).read_text()
+    assert 'Build by LaiQE' in footer, filename
+    assert 'version.disturl' not in footer, filename
+    assert 'version.luciversion' not in footer, filename
 assert (root / 'usr/share/argon/config-integrated').is_file()
 assert 'luci-app-argon-config' not in packages, 'Legacy Argon settings package was pulled back in'
 assert packages['luci-i18n-argon-config-zh-cn'] == packages['luci-theme-argon'], 'Stale Argon translation package'
