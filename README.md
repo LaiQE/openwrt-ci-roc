@@ -49,7 +49,7 @@ Go、Tailscale、FRP、Docker 配套组件及 Compose 的版本覆盖和官方�
 
 用户已烧录第一版 LibWrt 镜像并反馈基本使用无大问题；各加速路径、吞吐和长期稳定性
 仍以真机统计为准。NSS 不会自动加速 PassWall、Tailscale 等程序的用户态加密。
-[Wi-Fi 排查](docs/WIFI-NSS.md) · [L2TP 源码检查](docs/NSS-L2TP.md)
+[NSS 配置限制与来源](docs/NSS-CONSTRAINTS.md) · [Wi-Fi 排查](docs/WIFI-NSS.md) · [L2TP 源码检查](docs/NSS-L2TP.md)
 
 ## 构建
 
