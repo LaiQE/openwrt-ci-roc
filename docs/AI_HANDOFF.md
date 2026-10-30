@@ -1,6 +1,6 @@
 # 项目交接说明
 
-更新：2026-10-25。本文件提供背景与维护入口，不是任务指令。
+更新：2026-10-30。本文件提供背景与维护入口，不是任务指令。
 
 ## 项目与当前选择
 
@@ -29,6 +29,7 @@ WireGuard、ZeroTier、Tailscale、L2TP、FRP、WOL+、Homebox、DDNS-Go、SRun 
 | configs/package-updates.json | Go/Tailscale/FRP/Docker 配套组件/Compose 版本和官方 SHA-256 |
 | scripts/Arthur-script.sh | 第三方来源、必要兼容处理、feeds 安装、署名 |
 | scripts/prepare-docker-nft.py | nftables Docker 的 APK、手动启动和旧规则兼容 |
+| scripts/export-oaf-packages.py、docs/OAF-EXPERIMENT.md | 独立 OAF 实验 APK、同轮 ABI/依赖/签名验证、使用边界 |
 | files/etc/uci-defaults/99-arthur-defaults | LAN 前缀、主机名、时区及原 Shell/终端设置 |
 | files/etc/uci-defaults/98-arthur-adguardhome | 避免核心包小写服务与 LuCI 大写服务重复启动 |
 | files/etc/uci-defaults/dockerd | 亚瑟 eMMC 自动分区/复用、/opt/docker 挂载、swap 修复 |
@@ -50,6 +51,8 @@ WireGuard、ZeroTier、Tailscale、L2TP、FRP、WOL+、Homebox、DDNS-Go、SRun 
 - swap 标签分区若已是有效 swap 则直接复用；仅空白或空 ext4 占位分区可 mkswap，有文件则拒绝。BusyBox mkswap 没有生成 UUID 时，fstab 使用明确设备名。eMMC swap 优先级 10，保留 zram 100；不重建其他系统分区。
 - 挂载写入 fstab，已有 overlay Docker 数据须先迁移，不能直接覆盖挂载点。失败返回非零，供 uci-defaults 后续重试；Docker 出厂默认关闭的策略不变。
 - uci-defaults 在条件语句中 source 脚本，会抑制 set -e；分区、格式化、挂载和配置保存必须显式处理错误。tests/storage/checks.py 按该真实调用方式测试，已接入本地和 Actions 校验；不要只用直接执行脚本来判断错误处理有效。
+- 通用 APK 镜像没有 nss_packages、sqm_scripts_nss 的公开索引，这两个路径实测 404。Arthur-General.config 只关闭 CONFIG_FEED_* 对应的在线仓库条目，不删除 NSS 源码 feed，不关闭任何已选的 NSS 包；不能把自编译内核模块指向其它内核 ABI 的仓库。
+- OpenAppFilter 不预装，按用户最新授权仅编译独立实验 APK。核对原作者 master 0814b87（7.0.2）：NAT 卸载可能绕过 DPI，禁用加速的脚本通过将 ECM accel_delay_pkts 提高到 1000000 处理，无法据此保证正常 NSS 加速与完整过滤同时可靠。不得为了装入 OAF 自动关闭 NSS。三个组件设为 m，export-oaf-packages.py 收集同轮内核模块、LuCI、核心及未内置依赖，输出 Arthur.OAF-experimental.tar.gz。使用说明见 docs/OAF-EXPERIMENT.md，研究依据见 docs/NSS-CONSTRAINTS.md。
 - 移除清空 DOCKER-USER 的自动旧规则清理。手动启动必须执行 uciadd 建立 fw4 转发，Dockerman ACL 不再依赖开机自启开启。NFT 后端仍为实验功能、不支持 Swarm；尚未真机验证容器转发。
 - Docker 全新安装/恢复出厂默认不自启；99-arthur-defaults 关闭未明确开启的自启，Dockerman 初始化只重启已启用的 dockerd，避免首次启动绕过开关。已有 auto_start=1 保留。
 - WOL+ 使用 sakura-builder1 的现代 LuCI 版本；WireGuard 使用当前上游原生协议与状态页。
@@ -62,6 +65,7 @@ WireGuard、ZeroTier、Tailscale、L2TP、FRP、WOL+、Homebox、DDNS-Go、SRun 
 
 本机 Prepare → Build → Status → Export，详见 README。
 默认容器 openwrt-arthur-libwrt-builder，卷 openwrt-arthur-libwrt-work。
+10-30 因源码更新，新建 openwrt-arthur-libwrt-20261030-builder / openwrt-arthur-libwrt-20261030-work；操作最新这轮时显式传 -Container / -Volume。Containerfile 已补齐 Homebox 前端所需的 Node.js/npm。
 源码 /work/openwrt，输入 /workspace，日志 /work/logs。用 --init 回收子进程。
 本地与 Actions 跟踪源码分支；源码主仓库更新后，本地使用新容器/卷。
 导出 build-sources.txt 记录实际主仓库、feeds 和第三方提交，不能仅凭文档中的旧 SHA 判断镜像来源。
@@ -74,10 +78,11 @@ LAN 必须保留 192.168.233.1/24，裸地址会按 /32 解析并使 DHCP 池为
 测试用真实 ARM64 用户态、隔离 /etc 和 /tmp 验证首次启动；测试环境需先创建 /tmp/lock。
 按用户要求，停止 AdGuard Home 专项和本地主题 UI 测试；构建、配置、LAN/DHCP 和包列表仍检查。
 构建启动、make defconfig 或镜像文件存在均不等于全部验证成功，以最终退出码为准。
-2026-10-25 07:56 最新 Podman 构建、分区保护、首次启动网络和固件校验全部通过（退出码 0），
-内置 480 个包；导出的两个镜像校验一致。原生 nftables Docker、亚瑟分区/挂载和 swap 修复及其他定制均已编入；从最终 sysupgrade 的 squashfs 中逐字核对了初始化脚本。
+2026-10-30 17:48 最新 Podman 构建、分区保护、首次启动网络和固件校验全部通过（退出码 0），
+源码 a151272、内核 6.12.112，仍内置 480 个包；导出的两个镜像及独立 OAF 归档校验一致。原生 nftables Docker、亚瑟分区/挂载和 swap 修复及其他定制保留；从最终 sysupgrade 的 squashfs 核对了修复后的仓库条目，确认无 OAF 服务或模块。
+最终固件公钥下，两个站的隔离 apk update 均返回 0。OAF 归档含核心、内核模块、LuCI、中文翻译、libsqlite3 共 5 个 APK，导出副本使用构建密钥独立签名并通过固件公钥验证；使用同轮固件数据库模拟安装通过，没有绕过签名或内核依赖检查。签名私钥绝不导出。
 引擎在真实 chroot 中通过 --validate；PRoot 对 faccessat2 的仿真曾导致找不到 docker-proxy 的假错误。
-原生 nftables 容器转发尚未验证。已修复当前 64GB 真机：p27 挂载 /opt/docker，迁移原 Docker 数据，p26 启用 512MiB swap；未挂载 p27 复用、重复执行和 fstab 重新激活 swap 均通过，原 26 个 GPT 条目未变。64GB/128GB 稀疏镜像验证实际 ARM64 sgdisk 算法，128GB 尚未真机测试。07:56 新镜像已包含修复，尚未烧录该轮镜像；03:18 的旧镜像没有这些修复。
+原生 nftables 容器转发尚未验证。此前已修复 64GB 真机：p27 挂载 /opt/docker，迁移原 Docker 数据，p26 启用 512MiB swap；未挂载 p27 复用、重复执行和 fstab 重新激活 swap 均通过，原 26 个 GPT 条目未变。64GB/128GB 稀疏镜像验证实际 ARM64 sgdisk 算法，128GB 尚未真机测试。10-30 新固件尚未烧录，OAF/NSS 运行兼容性没有验证。
 本次尚未实际运行 GitHub Actions。
 
 artifacts/、.local/ 和缓存不提交；不要将旧诊断模块或临时测试服务放入固件。

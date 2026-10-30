@@ -87,6 +87,9 @@ case "$STAGE" in
         python3 "$WORKSPACE/tests/storage/checks.py"
         python3 "$WORKSPACE/tests/network/first-boot-checks.py" \
             "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
+        python3 "$WORKSPACE/scripts/export-oaf-packages.py" "$OPENWRT_PATH" \
+            "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
+            "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"
         python3 "$WORKSPACE/tests/firmware/checks.py" \
             "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
             "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"

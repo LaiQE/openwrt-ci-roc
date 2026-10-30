@@ -37,8 +37,10 @@ required.update('kmod-qca-nss-drv-' + name for name in managers)
 assert not required - packages.keys(), sorted(required - packages.keys())
 for name in packages:
     assert name not in {'luci-app-ddns', 'vlmcsd', 'luci-app-vlmcsd',
-                        'mwan3', 'luci-app-mwan3'}, name
+                        'mwan3', 'luci-app-mwan3', 'luci-app-oaf',
+                        'luci-app-appfilter', 'appfilter', 'open-app-filter', 'kmod-oaf'}, name
     assert not name.startswith(('ddns-scripts', 'luci-i18n-vlmcsd-')), name
+    assert not name.startswith('luci-i18n-oaf-'), name
     assert (not name.startswith('luci-i18n-ddns-') or
             name.startswith('luci-i18n-ddns-go-')), name
 for name in ('kmod-qca-nss-drv', 'kmod-qca-nss-drv-l2tpv2',
@@ -46,6 +48,16 @@ for name in ('kmod-qca-nss-drv', 'kmod-qca-nss-drv-l2tpv2',
     assert '11.4.' in packages[name], (name, packages[name])
 assert b'NSS.CP.11.4.0.5-6-R' in (
     root / 'lib/firmware/qca-nss0-retail.bin').read_bytes()
+
+repository_files = list((root / 'etc/apk/repositories.d').glob('*'))
+repositories = [line.strip() for path in repository_files if path.is_file()
+                for line in path.read_text().splitlines()
+                if line.strip() and not line.lstrip().startswith('#')]
+assert repositories, 'No APK repositories installed'
+for url in repositories:
+    assert '/nss_packages/' not in url and '/sqm_scripts_nss/' not in url, url
+for feed in ('base', 'luci', 'packages', 'routing'):
+    assert any(url.endswith(f'/{feed}/packages.adb') for url in repositories), feed
 
 images = [target / item['name'] for item in profiles['jdcloud_re-ss-01']['images']]
 assert images and any('sysupgrade' in path.name for path in images), images

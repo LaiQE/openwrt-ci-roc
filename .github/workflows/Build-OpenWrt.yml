@@ -319,6 +319,9 @@ jobs:
         python3 "$GITHUB_WORKSPACE/tests/storage/checks.py"
         python3 "$GITHUB_WORKSPACE/tests/network/first-boot-checks.py" \
           "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
+        python3 "$GITHUB_WORKSPACE/scripts/export-oaf-packages.py" "$OPENWRT_PATH" \
+          "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
+          "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"
         python3 "$GITHUB_WORKSPACE/tests/firmware/checks.py" \
           "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
           "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"

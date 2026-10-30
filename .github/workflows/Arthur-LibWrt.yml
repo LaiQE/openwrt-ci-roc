@@ -33,4 +33,5 @@ jobs:
         内置 Docker/Compose、磁盘管理、L2TPv2/NSS、WireGuard、ZeroTier、Tailscale、
         Lua Dockerman、完整 AdGuard Home 界面、DDNS-Go、FRP、WOL+、
         PassWall（Xray/Sing-box/Hysteria2/TUIC）。Wi-Fi NSS 已开启，请先通过有线配置 WPA2 密码。
+        另生成 OpenAppFilter 独立实验 APK 归档，不预装，NSS 兼容性待用户测试。
         完整包列表以 config 与 manifest 为准。默认管理地址 192.168.233.1。

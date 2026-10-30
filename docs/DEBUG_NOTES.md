@@ -52,6 +52,18 @@
 - 64GB/128GB 稀疏镜像以实际 ARM64 sgdisk 验证新算法，均保留原 26 个 GPT 条目。隔离逻辑检查覆盖创建、旧 p27 标签差异、容量门槛、重复运行、swap 数据保护和挂载失败。真机验证了未挂载 p27 的自动挂载、文件/UUID 保留及 block mount 重新启用 swap。128GB 尚未真机测试。
 - 07:56 完整构建及分区、网络、固件校验全部通过，退出码 0，仍为 480 个包。factory 为 165007894 字节，sysupgrade 为 164546833 字节；已导出并复核 SHA-256。另从最终 sysupgrade 的 squashfs 直接核对了初始化脚本。新镜像待用户烧录，未自动刷机；本次未运行 GitHub Actions。
 
+## 2026-10-30：APK 仓库与 OpenAppFilter 核对
+
+- 用户报告 apk update 的 nss_packages、sqm_scripts_nss 两个索引失效。分别核对 vsean 镜像和 ImmortalWrt 下载站：两者这两个路径均为 404，而 base/luci/packages/routing 均为 200。include/feeds.mk 确认 CONFIG_FEED_* 控制镜像内仓库条目；关闭这两个标志，保留源码 feed 和内置 NSS 包。固件检查增加对应的仓库条目与包列表约束。
+- 使用已有固件公钥，在隔离 root 中删除这两条地址后执行真正的 apk update；两个站均返回 0、9469 个可用包。distfeeds.list 是自动生成的文件，apk 仅将 customfeeds.list 声明为 conffile，因此没有修改用户自定义源文件。
+- 原作者 destan19/OpenAppFilter master 0814b87（服务 7.0.2）仍提示硬件加速会影响 DPI，并以提高 ECM accel_delay_pkts 到 1000000 处理禁用加速；作者 Issue #287 也说明卸载可能绕过 DPI。用户明确 NSS 优先，随后又明确要求 OAF 编为独立实验包，因此不改变 NSS 配置，不预装 OAF，将核心、内核模块和 LuCI 设为 m。Netify 5 NFQUEUE 等替代方向没有找到可靠的亚瑟 NSS/LuCI 拦截配套证据，不宣称兼容。
+- 为加入独立实验包，主动停止一轮尚在 host tools 阶段的构建，退出码 143 对应该次中止；随后按新配置继续构建。独立归档验证内核 ABI，并收集新固件未内置的必要依赖，便于手动安装。
+- 新容器首次完整编译暴露 Homebox host 构建需要 npm，而 Containerfile 未声明 Node.js/npm；补齐镜像依赖并在本轮容器安装对应工具后续编，不修改 Homebox 运行默认值。
+- 独立归档适配 APK 的 noarch 标记。模拟安装又发现常规 OpenWrt APK 依赖仓库索引签名，离线文件默认没有独立签名；导出时只对副本使用本轮构建密钥签名，保留固件公钥验证，不以 allow-untrusted 绕过检查。
+- LibWrt 25.12-nss 从 3a3d0b0 更新到 a151272；本轮使用新容器 openwrt-arthur-libwrt-20261030-builder 和新卷 openwrt-arthur-libwrt-20261030-work，从新的源码、工具链和构建目录开始。
+- 17:48 完整构建及分区、网络、固件检查通过，退出码 0；内核 6.12.112，仍内置 480 个包。factory 为 165054682 字节，sysupgrade 为 164618513 字节。修复源在最终公钥下对两个站实际 apk update 均通过；最终 squashfs 复核源条目及 OAF 缺席。
+- OAF 独立归档包含 5 个 APK（7.0.2 核心、6.12.112 模块、LuCI、中文、SQLite），签名验证及同轮固件数据库模拟安装通过；包内 SHA-256、导出固件/归档 SHA-256 均核对。本轮未刷机、未在路由器上安装实验包，运行兼容性不作保证。
+
 来源：
 [LibWrt Wi-Fi 说明](https://github.com/LiBwrt/LibWrt/issues/167)、
 [Argon 弹窗修复](https://github.com/jerrykuku/luci-theme-argon/commit/1055e79)、

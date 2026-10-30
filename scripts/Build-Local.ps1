@@ -60,7 +60,7 @@ try {
     }
     # Keep source/build trees on Linux ext4, and copy only the small configuration inputs.
     Invoke-Podman exec --user root $Container chown -R builder:builder /workspace
-    foreach ($directory in @('configs', 'scripts', 'files', 'package', 'tests')) {
+    foreach ($directory in @('configs', 'scripts', 'files', 'package', 'tests', 'docs')) {
         # Copy a fresh input snapshot, including deletions from the repository.
         Invoke-Podman exec --user root $Container rm -rf -- "/workspace/$directory"
         Invoke-Podman exec --user root $Container mkdir -p "/workspace/$directory"

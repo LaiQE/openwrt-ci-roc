@@ -212,6 +212,12 @@ if package_enabled luci-app-tailscale; then
   # As in the original project, the UI owns the service and UCI configuration.
   sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d' feeds/packages/net/tailscale/Makefile
 fi
+if package_enabled luci-app-oaf appfilter kmod-oaf; then
+  # Build the original author's matching UI, daemon and kernel module as APKs.
+  # The Arthur seed selects them as modules, never as firmware defaults.
+  rm -rf feeds/luci/applications/luci-app-appfilter feeds/packages/net/open-app-filter
+  clone_repository https://github.com/destan19/OpenAppFilter master package/OpenAppFilter
+fi
 if package_enabled luci-theme-argon; then
   rm -rf feeds/luci/themes/luci-theme-argon feeds/luci/applications/luci-app-argon-config
   clone_repository https://github.com/jerrykuku/luci-theme-argon master package/luci-theme-argon

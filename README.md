@@ -12,6 +12,8 @@
 - 署名显示在系统概览、Argon 登录页及主题页脚；页脚显示 LuCI 分支名（省略 branch/修订号）、Argon 版本及署名。
 - 路由器管理员和 SRun 不预置用户密码；AdGuard Home 保留其来源默认设置。
 - Docker 在全新刷机或恢复出厂后默认关闭，可在 Dockerman 中手动启动并启用自启；保留升级时已有的明确自启设置。
+- APK 保留可用的通用软件仓库，不生成没有公共索引的 `nss_packages`、`sqm_scripts_nss` 地址；NSS 源码 feed 和内置加速模块保留。
+- 优先保留 NSS：OpenAppFilter 不预装进固件，仅生成原作者上游的独立实验 APK，供用户后续手动验证；[使用与兼容边界](docs/OAF-EXPERIMENT.md)。
 - 编译优化和 nlbwmon 刷新策略跟随上游；不再强制 O3 或 2 秒刷新。
 
 ## 内置功能
@@ -69,6 +71,8 @@ Windows PowerShell，在仓库根目录执行：
 ```
 
 默认容器 `openwrt-arthur-libwrt-builder`，卷 `openwrt-arthur-libwrt-work`。
+2026-10-30 本轮改用新环境；操作本轮构建时给上述命令追加
+`-Container openwrt-arthur-libwrt-20261030-builder -Volume openwrt-arthur-libwrt-20261030-work`。
 首次创建容器可加 `-RebuildImage` 重新拉取基础系统并跳过镜像层缓存；它不会清空已有卷。
 源码、工具链、下载和缓存位于 Linux 数据卷中，以普通用户编译，容器使用 `--init`。
 每次复制完整输入快照，包含文件删除；同一源码基线可以续编。
@@ -78,11 +82,20 @@ Windows PowerShell，在仓库根目录执行：
 源码提交和日志。构建会核对显式配置、首次启动 LAN/DHCP、磁盘初始化保护逻辑，以及必要包和正确版本的初始化脚本是否实际装入。
 按用户要求不再进行 AdGuard Home 专项或本地主题界面测试。
 
-2026-10-25 07:56 的 Podman 构建及上述校验全部通过，最终退出码 0；
+`Arthur.OAF-experimental.tar.gz` 为另行生成的 OpenAppFilter 实验包，包含 LuCI、核心、
+同轮内核模块、中文翻译（若生成）及固件未内置的必要依赖，并附包信息和 SHA-256。
+它们没有安装进固件；只能配合同一轮新固件手动实验，不能将“编译成功”视为已兼容 NSS。
+安装和验证方法见 [实验包说明](docs/OAF-EXPERIMENT.md)。
+
+2026-10-30 17:48 的 Podman 构建及上述校验全部通过，最终退出码 0；
 仅生成亚瑟 factory/sysupgrade 镜像，内置 480 个包。导出后的镜像 SHA-256 已复核。
+源码更新至 `a151272`，内核为 **6.12.112**。调整后的仓库列表已使用最终固件公钥，
+分别对 ImmortalWrt 下载站及 vsean 镜像执行隔离的 `apk update`，均成功。
 原生 nftables Docker、Lua 界面、默认关闭、亚瑟自动分区/挂载与 swap 修复、ULA 和页脚调整均已编入。
 编译出的引擎在隔离 chroot 中通过配置校验；容器实际转发尚待验证。
-已从最终 sysupgrade 的 squashfs 中逐字核对分区脚本；本轮新镜像待用户烧录验证。
+已从最终 sysupgrade 的 squashfs 核对修复后的软件源条目；本轮新镜像待用户烧录验证。
+OAF 归档含 5 个独立签名 APK，已通过公钥验证和同轮固件数据库上的模拟安装；
+最终镜像中确认没有 OAF 服务、模块及 LuCI，实际 NSS/DPI 兼容性留待用户手动实验。
 
 ## 磁盘与维护
 
