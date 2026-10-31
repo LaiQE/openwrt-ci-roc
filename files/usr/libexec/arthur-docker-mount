@@ -1,0 +1,57 @@
+#!/bin/sh
+# Restore /data/docker -> /opt/docker without falling back to the overlay.
+set -e
+[ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'jdcloud,re-ss-01' ] || exit 0
+if [ "$1" = --docker ]; then
+	case "$(uci -q get dockerd.globals.data_root)" in
+		''|/opt/docker|/opt/docker/) : ;;
+		*) exit 0 ;; # Respect an explicitly configured different Docker root.
+	esac
+fi
+fail() { logger -s -t arthur-storage "$*"; exit 1; }
+mkdir -p /tmp/lock || exit 1
+exec 9>/tmp/lock/arthur-storage.lock
+flock -w 30 9 || fail 'Storage initialization is busy'
+data=/data
+target=/opt/docker
+uuid=$(uci -q get fstab.arthur_data.uuid) || fail 'Data partition is not configured'
+[ -n "$uuid" ] || fail 'Data partition UUID is empty'
+[ "$(uci -q get fstab.arthur_data.enabled)" = 1 ] || fail 'Data partition mount is disabled'
+[ "$(uci -q get fstab.arthur_data.target)" = "$data" ] || fail 'Unexpected configured data mount path'
+[ ! -L "$data" ] || fail "$data is a symlink"
+[ ! -L "$target" ] || fail "$target is a symlink"
+
+mount_field() {
+	awk -v path="$1" -v field="$2" '$5 == path {print $field}' /proc/self/mountinfo
+}
+
+if [ -z "$(mount_field "$data" 3)" ]; then
+	mkdir -p "$data" || fail "Cannot create $data"
+	entries=$(find "$data" -mindepth 1 -maxdepth 1 -print) || fail "Cannot inspect $data"
+	[ -z "$entries" ] || fail "$data contains unmounted data; refusing to cover it"
+	block mount || fail 'Cannot mount configured data partition'
+fi
+data_id=$(mount_field "$data" 3)
+[ -n "$data_id" ] || fail "$data is not mounted"
+[ "$(mount_field "$data" 4)" = / ] || fail "$data is not a full filesystem mount"
+source=$(awk -v path="$data" '$2 == path {print $1}' /proc/mounts)
+[ "$(blkid -p -s UUID -o value "$source")" = "$uuid" ] || fail "$data UUID does not match configured data partition"
+[ "$(blkid -p -s TYPE -o value "$source")" = ext4 ] || fail "$data is not ext4"
+[ ! -L "$data/docker" ] || fail "$data/docker is a symlink"
+[ -z "$(mount_field "$data/docker" 3)" ] || fail "$data/docker is separately mounted"
+mkdir -p "$data/docker" "$target" || fail 'Cannot create Docker bind directories'
+target_id=$(mount_field "$target" 3)
+if [ -n "$target_id" ]; then
+	if [ "$target_id" != "$data_id" ] || [ "$(mount_field "$target" 4)" != /docker ]; then
+		fail "$target is occupied by a different mount"
+	fi
+	exit 0
+fi
+pidof dockerd >/dev/null 2>&1 && fail 'Stop Docker before creating its storage bind'
+entries=$(find "$target" -mindepth 1 -maxdepth 1 -print) || fail "Cannot inspect $target"
+[ -z "$entries" ] || fail "$target contains unmounted data; refusing to cover it"
+mount --bind "$data/docker" "$target" || fail 'Docker bind mount failed'
+if [ "$(mount_field "$target" 3)" != "$data_id" ] || [ "$(mount_field "$target" 4)" != /docker ]; then
+	fail 'Docker bind mount verification failed'
+fi
+logger -t arthur-storage "$data/docker bound to $target"

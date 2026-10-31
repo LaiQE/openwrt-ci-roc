@@ -102,7 +102,7 @@ Windows PowerShell，在仓库根目录执行：
 默认容器 `openwrt-arthur-libwrt-builder`，卷 `openwrt-arthur-libwrt-work`。
 2026-10-30 本轮改用新环境；操作本轮构建时给上述命令追加
 `-Container openwrt-arthur-libwrt-20261030-builder -Volume openwrt-arthur-libwrt-20261030-work`。
-2026-10-31 内置 OAF 的最新构建使用
+2026-10-31 内置 OAF、`/data` 与 Docker 绑定挂载的最新构建使用
 `-Container openwrt-arthur-libwrt-20261031-builder -Volume openwrt-arthur-libwrt-20261031-work`。
 首次创建容器可加 `-RebuildImage` 重新拉取基础系统并跳过镜像层缓存；它不会清空已有卷。
 源码、工具链、下载和缓存位于 Linux 数据卷中，以普通用户编译，容器使用 `--init`。
@@ -118,26 +118,32 @@ OpenAppFilter 已改为内置，停止生成独立实验归档。全新刷机或
 本地与 Actions 都检查包列表、真实 ARM64 启动脚本的默认值、配置缺失回退和手动启用后的保留行为。
 用户已实测 OAF 运行时 IPv4 NSS 加速有效；IPv6 NSS 加速仍未验证通过，按要求停止排查，不为此更换驱动。
 
-2026-10-31 16:29 的完整 Podman 构建及上述校验全部通过，最终退出码 0；
+2026-10-31 17:29 的 Podman 构建及上述校验全部通过，最终退出码 0；
 仅生成亚瑟 factory/sysupgrade 镜像，内置 **485 个包**。LibWrt 源码为 `96a0ec8`，
 NSS feed 为 `880c1d8`，内核仍为 **6.12.112**；原作者 OAF 为 7.0.2，默认值定制包修订号为 r2。
 最新 NSS feed 的 expectation callback 补丁需要补齐 chain notifier 编译条件，详见 [调试记录](docs/DEBUG_NOTES.md)；没有改动 IPv6 加速逻辑。
-已直接从最终 sysupgrade 的 squashfs 核对四项 OAF 默认值、后台启动入口、内核模块及修复后的 APK 源。
-原作者基础特征库未改动；导出后的全部 SHA-256 已复核，新固件位于 `artifacts/20261031-oaf/`。
-Docker 默认关闭、自动分区/swap、ULA、页脚及其他既有定制继续保留；本轮新镜像待用户手动烧录，尚未实际运行 GitHub Actions。
+已直接从最终 sysupgrade 的 squashfs 核对 `/data` 初始化、绑定恢复、旧 Docker 数据清理、启动保护及四项 OAF 默认值。
+原作者基础特征库未改动；导出后的全部 SHA-256 已复核，新固件位于 `artifacts/20261031-data/`。
+Docker 默认关闭、自动分区/swap、ULA、页脚及其他既有定制继续保留；新的挂载方案待用户手动烧录验证，尚未实际运行 GitHub Actions。
 
 ## 磁盘与维护
 
 `files/etc/uci-defaults/dockerd` 仅处理亚瑟的 `/dev/mmcblk0`，构建时替换 Docker 包内的初始化脚本：
 
-- 优先复用已有 `storage` 分区；没有该标签时，复用已有第 27 分区。分区必须**大于 1GiB**且为 ext4，挂载到 `/opt/docker`，按 UUID 写入 fstab；不重新格式化已有分区。
+- 优先复用已有 `storage` 分区；没有该标签时，复用已有第 27 分区。分区必须**大于 1GiB**且为 ext4，按 UUID 挂载到 **`/data`**，不重新格式化已有分区。
+- 将 **`/data/docker` 绑定挂载到 `/opt/docker`**，Docker 的数据路径保持不变；其它目录可用于存放通用数据。两处共享同一分区容量，没有额外划分 Docker 分区。
 - 没有数据分区时，先备份并用 `sgdisk -e` 修复 GPT 尾部位置，再使用实际剩余扇区创建 `storage`。仅格式化本次新建且无文件系统的分区，适应 64GB/128GB 容量。
+- 按用户选择，不迁移旧版分区根目录中的 Docker 数据：在 Docker 停止后删除识别到的旧容器、镜像、卷等标准 Docker 数据；保留同分区的其它文件及已有 `/data/docker`。清理失败可重试，旧目录中存在挂载时停止处理。
 - 保留有效的 swap；将标签为 `swap` 的空白分区或空 ext4 占位分区初始化为交换空间。有文件时拒绝格式化。eMMC swap 优先级 10，保留更高优先级的 zram。
-- 已有 Docker 数据阻挡挂载时停止并记录日志，须先迁移数据；失败返回非零，保留初始化脚本供重试。磁盘初始化独立于 Docker 自启开关。
+- 清理升级后已禁用、UUID 已不存在的 `/rom`、`/overlay` 旧配置，以及失效的项目旧 `mountdocker` 条目；不删除启用中的系统条目、有效 UUID 或无关挂载。修改前备份 fstab 到 `/tmp/arthur-storage-backup/`。
+- `/data` 挂载由 fstab 处理；绑定挂载由 `arthur-data` 在其后恢复，Docker 手动启动时也会检查。挂载缺失或路径中有未挂载数据时，拒绝让默认 Docker 路径落到系统 overlay；用户明确设置的其它 Docker 数据路径保留。
+- 不覆盖挂载路径下尚未清理的 overlay 文件，路径非空时停止并留待手动处理；失败返回非零，保留初始化脚本供重试。磁盘初始化和绑定挂载独立于 Docker 自启开关。
 
-当前 64GB 真机已完成创建、挂载、Docker 数据迁移和 swap 修复；未挂载分区的复用、重复执行、fstab 重新启用 swap 均已验证。64GB/128GB 稀疏镜像验证了分区算法，原有 26 个 GPT 条目保持不变；128GB 尚未真机测试。
+旧版直接挂载 `/opt/docker` 的方案已在 64GB 真机验证；64GB/128GB 稀疏镜像验证了分区算法，原有 26 个 GPT 条目保持不变，128GB 尚未真机测试。
+新的 `/data` + bind 方案已通过隔离逻辑回归及临时容器中的真实绑定挂载检查，升级后的自动清理与挂载仍待用户在真机验证。
 实机备份保存在本机已忽略的 `.local/arthur-storage-backup/`；仍应在刷机前备份磁盘数据。
 隔离逻辑检查：`python3 tests/storage/checks.py`（需要 Bash）。
+真实绑定检查：`tests/storage/bind-checks.py`，需在独立挂载命名空间或临时容器中提供 `CAP_SYS_ADMIN`；仅使用临时 tmpfs，不操作真实磁盘。
 
 [AI 交接说明](docs/AI_HANDOFF.md) · [简短调试记录](docs/DEBUG_NOTES.md) · [项目约定](AGENTS.md)
 

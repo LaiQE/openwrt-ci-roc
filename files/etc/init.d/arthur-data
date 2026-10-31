@@ -1,0 +1,6 @@
+#!/bin/sh /etc/rc.common
+# fstab starts at 11; restore the bind before dockerd starts at 99.
+START=12
+start() {
+	/usr/libexec/arthur-docker-mount
+}

@@ -76,6 +76,16 @@
 - ECM 包清理后单独重建通过，再完成整轮编译：16:29 最终退出码 0，内置 485 个包，内核仍为 6.12.112。分区、ARM64 首次启动网络、OAF 默认值/回退/保留和固件检查均通过。
 - 最终 sysupgrade 的 squashfs 已复核：四项 OAF 开关均为 0，管理后台 S96appfilter、oafd、oaf.ko 及 LuCI 已装入，APK 源条目保持修复；基础特征库与原作者源码一致。factory 为 166219498 字节，sysupgrade 为 165796113 字节，导出至 artifacts/20261031-oaf/ 后全部 SHA-256 一致；新镜像尚未烧录，Actions 尚未实际运行。
 
+## 2026-10-31：共享数据分区与 Docker bind
+
+- 用户要求将末尾数据分区用于通用存储：保留 storage/p27、大于 1GiB、64/128GB GPT 扩容及 swap 保护逻辑，分区改挂 /data，/data/docker 再绑定到 /opt/docker，Docker data_root 路径不变。
+- 用户截图的 p27 已实际挂载正常；“不存在”是禁用的旧 /rom、/overlay UUID 条目。初始化先备份 fstab，仅清理这类禁用且 UUID 无法解析的系统条目和项目旧 mountdocker 无效条目，保留有效或启用的用户配置。
+- 当前 fstools block.c 的 main_mount 只遍历设备，不执行目录来源的 bind。因此增加 S12arthur-data（fstab 为 S11），以及 dockerd 手动/自动 start 的挂载前置检查；验证 mountinfo 的设备号与 /docker 根，避免绑定缺失后写入 overlay。
+- 用户随后明确无需迁移旧 Docker 数据，改为停机后删除识别到的旧根标准 Docker 数据；保留一般文件和已有 /data/docker。UUID 标记支持清理中断后重试，旧数据目录中有挂载时拒绝递归删除；未挂载的 overlay 数据也不覆盖。17:16 启动的一轮构建因此主动中止，退出 143 对应该次中止。
+- 新布局和旧布局回归均通过；无真实磁盘映射的临时容器中，真实 tmpfs/bind 的 inode、写入、重复启动及覆盖保护检查通过。
+- 17:29 最终构建退出 0，485 个包；存储、ARM64 首次启动网络、OAF 及固件检查全部通过。直接从 sysupgrade 的 squashfs 复核最终挂载与清理脚本、S12 恢复入口、Docker 启动保护和 OAF 四项默认关闭。
+- factory 为 166221902 字节，sysupgrade 为 165796113 字节；导出至 artifacts/20261031-data/，全部 7 条 SHA-256 记录复核通过。已有 /data/docker 完整保留的用例通过，新的挂载方案尚未真机刷入验证。
+
 来源：
 [LibWrt Wi-Fi 说明](https://github.com/LiBwrt/LibWrt/issues/167)、
 [Argon 弹窗修复](https://github.com/jerrykuku/luci-theme-argon/commit/1055e79)、

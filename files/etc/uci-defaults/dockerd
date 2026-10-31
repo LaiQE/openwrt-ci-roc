@@ -6,7 +6,8 @@ set -e
 
 [ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = 'jdcloud,re-ss-01' ] || exit 0
 disk=/dev/mmcblk0
-target=/opt/docker
+target=/data
+docker_target=/opt/docker
 backup=/tmp/arthur-storage-backup
 mkdir -p /tmp/lock "$backup" || exit 1
 chmod 700 "$backup" || exit 1
@@ -54,8 +55,81 @@ remove_duplicate() {
 	return 0
 }
 
+# block detect may retain disabled /rom and /overlay UUIDs across sysupgrade.
+# Preserve enabled system entries, valid UUIDs and unrelated user mounts. The
+# old project-owned mountdocker entry may also refer to a vanished UUID.
+remove_stale_system_mount() {
+	local path enabled uuid present
+	config_get path "$1" target
+	config_get enabled "$1" enabled
+	config_get uuid "$1" uuid
+	case "$path" in
+		/rom|/overlay) [ "$enabled" = 0 ] || return 0 ;;
+		/opt/docker) [ "$1" = mountdocker ] || return 0 ;;
+		*) return 0 ;;
+	esac
+	[ -n "$uuid" ] || return 0
+	present=$(blkid -t "UUID=$uuid" -o device 2>/dev/null || true)
+	if [ -z "$present" ]; then
+		uci -q delete "fstab.$1" || fail "Cannot remove stale system mount $1"
+		logger -t arthur-storage "Removed obsolete $path UUID entry $1"
+	fi
+	return 0
+}
+
+check_data_target() {
+	local path enabled uuid device present
+	config_get path "$1" target
+	config_get enabled "$1" enabled
+	config_get uuid "$1" uuid
+	config_get device "$1" device
+	[ "$path" = "$target" ] && [ "$enabled" != 0 ] || return 0
+	[ "$uuid" = "$keep_uuid" ] || [ "$device" = "$storage" ] || {
+		present=$(blkid -t "UUID=$uuid" -o device 2>/dev/null || true)
+		if [ "$1" != arthur_data ] || [ -z "$uuid" ] || [ -n "$present" ]; then
+			fail "fstab entry $1 already assigns $target to another device"
+		fi
+	}
+	return 0
+}
+
+prepare_docker_directory() {
+	local marker="$target/.arthur-docker-cleanup" name entries legacy=0 names
+	entries=$(awk -v path="$target/docker" '$5 == path {print $3}' /proc/self/mountinfo) || fail 'Cannot inspect Docker destination mount'
+	[ -z "$entries" ] || fail "$target/docker is separately mounted"
+	[ ! -L "$target/docker" ] || fail "$target/docker is a symlink"
+	[ ! -e "$target/docker" ] || [ -d "$target/docker" ] || fail "$target/docker is not a directory"
+	mkdir -p "$target/docker" || fail "Cannot create $target/docker"
+	# The user explicitly chose to discard the old Docker root. Only remove
+	# recognized Docker entries; keep general data and the new /data/docker.
+	if [ -f "$target/engine-id" ] || { [ -d "$target/containers" ] &&
+		{ [ -d "$target/image" ] || [ -d "$target/overlay2" ] || [ -d "$target/containerd" ]; }; }; then
+		legacy=1
+	fi
+	[ ! -L "$marker" ] || fail 'Docker cleanup marker is a symlink'
+	[ ! -e "$marker" ] || [ -f "$marker" ] || fail 'Invalid Docker cleanup marker'
+	if [ -f "$marker" ]; then
+		[ "$(cat "$marker")" = "$uuid" ] || fail 'Unrecognized Docker cleanup marker'
+		legacy=1
+	fi
+	[ "$legacy" -eq 1 ] || return 0
+	pidof dockerd >/dev/null 2>&1 && fail 'Stop Docker before removing its old data'
+	names='engine-id key.json builder containers image network overlay2 containerd buildkit plugins runtimes swarm tmp trust volumes aufs btrfs devicemapper vfs zfs fuse-overlayfs'
+	# Never recursively remove a mounted filesystem inside the old Docker root.
+	for name in $names; do
+		entries=$(awk -v path="$target/$name" '$5 == path || index($5, path "/") == 1 {print $5}' /proc/self/mountinfo) || fail 'Cannot inspect old Docker mounts'
+		[ -z "$entries" ] || fail "Unmount old Docker path $target/$name before cleanup"
+	done
+	printf '%s\n' "$uuid" > "$marker" || fail 'Cannot record Docker cleanup'
+	for name in $names; do
+		rm -rf -- "${target:?}/${name:?}" || fail "Cannot remove old Docker $name; retry with Docker stopped"
+	done
+	rm "$marker" || fail 'Cannot complete Docker cleanup marker'
+	logger -t arthur-storage "Old Docker data removed; $target/docker and other files preserved"
+}
+
 prepare_storage() {
-	local created=0 first last sectors type uuid source previous entries
+	local created=0 first last sectors type uuid source entries old_root data_root
 	storage=$(partition_named storage) || fail 'Cannot locate storage partition'
 	if [ -z "$storage" ] && [ -b "${disk}p27" ]; then
 		storage=${disk}p27
@@ -88,27 +162,46 @@ prepare_storage() {
 	[ "$type" = ext4 ] || fail "$storage is not ext4; existing partitions are never formatted"
 	uuid=$(blkid -p -s UUID -o value "$storage") || fail "Cannot read UUID on $storage"
 	[ -n "$uuid" ] || fail "No UUID on $storage"
-	source=$(awk -v path="$target" '$2 == path {print $1}' /proc/mounts)
+	keep_section=arthur_data keep_uuid=$uuid keep_device=$storage
+	config_load fstab || fail 'Cannot load fstab'
+	config_foreach check_data_target mount || fail 'Cannot inspect data mount configuration'
+	# A direct /opt/docker mount is the old layout. Never detach an active
+	# daemon or someone else's mount, and never hide overlay-resident data.
+	source=$(awk -v path="$docker_target" '$2 == path {print $1}' /proc/mounts) || fail 'Cannot read Docker mount state'
+	if [ -n "$source" ]; then
+		[ "$source" = "$storage" ] || fail "$docker_target is occupied by $source"
+		old_root=$(awk -v path="$docker_target" '$5 == path {print $4}' /proc/self/mountinfo) || fail 'Cannot read old Docker mount root'
+		if [ "$old_root" = / ]; then
+			pidof dockerd >/dev/null 2>&1 && fail 'Stop Docker before replacing its old mount'
+			umount "$docker_target" || fail "Cannot detach old $docker_target mount"
+		elif [ "$old_root" != /docker ]; then
+			fail "Unexpected mount root at $docker_target: $old_root"
+		fi
+	fi
+	source=$(awk -v path="$target" '$2 == path {print $1}' /proc/mounts) || fail 'Cannot read data mount state'
 	if [ "$source" != "$storage" ]; then
-		[ -z "$source" ] || fail "$target is occupied by $source; stop Docker and migrate its data first"
+		[ -z "$source" ] || fail "$target is occupied by $source"
+		[ ! -L "$target" ] || fail "$target is a symlink"
 		mkdir -p "$target" || fail "Cannot create $target"
 		entries=$(find "$target" -mindepth 1 -maxdepth 1 -print) || fail "Cannot inspect $target"
-		[ -z "$entries" ] || fail "$target contains data; migrate it before mounting"
-		previous=$(awk -v dev="$storage" '$1 == dev {print $2}' /proc/mounts)
-		[ -z "$previous" ] || umount "$previous" || fail "Cannot unmount $previous"
+		[ -z "$entries" ] || fail "$target contains unmounted data; migrate it before mounting"
 		mount -t ext4 -o rw,noatime "$storage" "$target" || fail "Cannot mount $storage at $target"
 	fi
-	keep_section=mountdocker keep_uuid=$uuid keep_device=$storage
+	data_root=$(awk -v path="$target" '$5 == path {print $4}' /proc/self/mountinfo) || fail 'Cannot read data filesystem root'
+	[ "$data_root" = / ] || fail "$target is not the full storage filesystem"
+	prepare_docker_directory
+	keep_section=arthur_data keep_uuid=$uuid keep_device=$storage
 	config_load fstab || fail 'Cannot load fstab'
 	config_foreach remove_duplicate mount || fail 'Cannot inspect fstab mounts'
-	uci set fstab.mountdocker=mount || fail 'Cannot configure storage mount'
-	uci -q delete fstab.mountdocker.device || true
-	uci -q delete fstab.mountdocker.label || true
-	if ! { uci set "fstab.mountdocker.uuid=$uuid" &&
-		uci set "fstab.mountdocker.target=$target" &&
-		uci set fstab.mountdocker.fstype=ext4 &&
-		uci set fstab.mountdocker.options=rw,noatime &&
-		uci set fstab.mountdocker.enabled=1 &&
+	config_foreach remove_stale_system_mount mount || fail 'Cannot inspect stale system mounts'
+	uci set fstab.arthur_data=mount || fail 'Cannot configure storage mount'
+	uci -q delete fstab.arthur_data.device || true
+	uci -q delete fstab.arthur_data.label || true
+	if ! { uci set "fstab.arthur_data.uuid=$uuid" &&
+		uci set "fstab.arthur_data.target=$target" &&
+		uci set fstab.arthur_data.fstype=ext4 &&
+		uci set fstab.arthur_data.options=rw,noatime &&
+		uci set fstab.arthur_data.enabled=1 &&
 		uci commit fstab; }; then
 		fail 'Cannot save storage mount configuration'
 	fi
@@ -171,5 +264,9 @@ prepare_swap() {
 # Critical operations above therefore check their status explicitly.
 . /lib/functions.sh || fail 'Cannot load OpenWrt configuration helpers'
 [ -f /etc/config/fstab ] || block detect > /etc/config/fstab || fail 'Cannot create fstab'
+[ -f "$backup/fstab-before-init" ] || cp -p /etc/config/fstab "$backup/fstab-before-init" || fail 'Cannot back up fstab'
 prepare_storage
 prepare_swap
+# The runtime helper takes the same lock and also protects manual Docker start.
+flock -u 9 || fail 'Cannot release storage initialization lock'
+/usr/libexec/arthur-docker-mount || fail 'Cannot bind Docker storage; keeping initializer for retry'

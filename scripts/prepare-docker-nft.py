@@ -32,6 +32,7 @@ daemon = 'feeds/packages/utils/dockerd/files/dockerd.init'
 replace_once(daemon, '\tuciadd\n\trc_procd start_service\n',
              '\trc_procd start_service\n')
 replace_once(daemon, '\tprocess_config\n\n\tprocd_open_instance\n',
+             '\t/usr/libexec/arthur-docker-mount --docker || return 1\n'
              '\tuciadd\n\tprocess_config\n\n\tprocd_open_instance\n')
 
 helper = Path('package/luci-app-dockerman/root/etc/init.d/dockerman')

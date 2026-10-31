@@ -98,6 +98,14 @@ assert "option firewall_backend 'nftables'" in docker_config
 partition_script = (root / 'etc/uci-defaults/dockerd').read_text()
 expected_initializer = Path(__file__).resolve().parents[2] / 'files/etc/uci-defaults/dockerd'
 assert partition_script == expected_initializer.read_text(), 'Stale disk initializer'
+storage_helper = root / 'usr/libexec/arthur-docker-mount'
+expected_helper = expected_initializer.parents[2] / 'usr/libexec/arthur-docker-mount'
+assert storage_helper.read_text() == expected_helper.read_text(), 'Stale Docker bind helper'
+assert os.access(storage_helper, os.X_OK)
+assert (root / 'etc/rc.d/S12arthur-data').is_symlink(), 'Data bind not restored at boot'
+assert 'START=12' in (root / 'etc/init.d/arthur-data').read_text()
+assert '/usr/libexec/arthur-docker-mount --docker || return 1' in (
+    root / 'etc/init.d/dockerd').read_text(), 'Docker could start without its data mount'
 
 
 def image_file(path):

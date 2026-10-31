@@ -37,6 +37,10 @@ class Router:
         (self.tmp / 'lock').mkdir()
         (self.tmp / 'sysinfo').mkdir()
         (self.tmp / 'sysinfo/board_name').write_text(board + '\n')
+        self.storage_mount = self.directory / 'storage-mount'
+        self.storage_mount.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> /tmp/storage-mount-calls\n'
+                                      '[ ! -f /tmp/fail-storage-mount ]\n')
+        self.storage_mount.chmod(0o755)
         (self.tmp / 'arthur-defaults').write_bytes(defaults.read_bytes())
         self.vim = self.directory / 'vim'
         if (root / 'usr/share/vim').is_dir():
@@ -56,6 +60,7 @@ class Router:
         result = subprocess.run([
             'proot', '-q', shutil.which('qemu-aarch64'), '-r', str(root),
             '-b', f'{self.etc}:/etc', '-b', f'{self.tmp}:/tmp',
+            '-b', f'{self.storage_mount}:/usr/libexec/arthur-docker-mount',
             '-b', '/dev:/dev', '-b', '/proc:/proc', *bindings, '-w', '/', *command,
         ], capture_output=True, text=True, timeout=60)
         if check and result.returncode:
@@ -138,7 +143,12 @@ test_start() {
 }
 extra_command test_start "Generate isolated manual-start configuration"
 ''')
+    (router.tmp / 'fail-storage-mount').touch()
+    assert router.run('/etc/init.d/dockerd', 'test_start', check=False).returncode != 0
+    assert not (router.tmp / 'dockerd/daemon.json').exists(), 'Docker continued after a mount failure'
+    (router.tmp / 'fail-storage-mount').unlink()
     router.run('/etc/init.d/dockerd', 'test_start')
+    assert (router.tmp / 'storage-mount-calls').read_text().splitlines() == ['--docker', '--docker']
     docker_json = json.loads((router.tmp / 'dockerd/daemon.json').read_text())
     assert docker_json['firewall-backend'] == 'nftables', docker_json
     assert docker_json['iptables'] is True, docker_json
