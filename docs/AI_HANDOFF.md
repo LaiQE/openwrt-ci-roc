@@ -69,8 +69,8 @@ WireGuard、ZeroTier、Tailscale、L2TP、FRP、WOL+、Homebox、DDNS-Go、SRun 
 
 本机 Prepare → Build → Status → Export，详见 README。
 默认容器 openwrt-arthur-libwrt-builder，卷 openwrt-arthur-libwrt-work。
-10-30 因源码更新，新建 openwrt-arthur-libwrt-20261030-builder / openwrt-arthur-libwrt-20261030-work；操作最新这轮时显式传 -Container / -Volume。Containerfile 已补齐 Homebox 前端所需的 Node.js/npm。
-10-31 内置 OAF 的新环境为 openwrt-arthur-libwrt-20261031-builder / openwrt-arthur-libwrt-20261031-work，按同样参数方式指定；创建时只复用哈希校验的下载缓存，工具链和编译目录重新生成。之后的 /data 挂载修复使用同一源码基线续编。
+10-30、10-31 曾因源码更新分别新建带日期的环境；/data 挂载修复在 10-31 同一源码基线上续编。Containerfile 已补齐 Homebox 前端所需的 Node.js/npm。
+本轮结束后已按用户要求清理项目编译容器、数据卷和专用镜像。已导出的 artifacts、日志和 .local/arthur-storage-backup 保留，下次本地构建重新创建环境，不再使用旧容器续编。
 源码 /work/openwrt，输入 /workspace，日志 /work/logs。用 --init 回收子进程。
 本地与 Actions 跟踪源码分支；源码主仓库更新后，本地使用新容器/卷。
 导出 build-sources.txt 记录实际主仓库、feeds 和第三方提交，不能仅凭文档中的旧 SHA 判断镜像来源。
@@ -88,8 +88,8 @@ LAN 必须保留 192.168.233.1/24，裸地址会按 /32 解析并使 DHCP 池为
 直接从最终 sysupgrade 的 squashfs 核对 /data 初始化与 bind 恢复、旧根 Docker 删除和新目录保留逻辑、Docker 启动前置检查及四项 OAF 默认值。导出后的全部 SHA-256 复核通过，最新产物位于 artifacts/20261031-data/。不再生成独立实验归档。
 原生 nftables Docker、亚瑟分区/挂载和 swap 修复及其他定制保留。此前 10-30 已用固件公钥对 ImmortalWrt/vsean 两个站执行隔离 apk update，均返回 0；当前仓库条目延续修复，不恢复不存在的 NSS feed 索引。签名私钥绝不导出。
 引擎在真实 chroot 中通过 --validate；PRoot 对 faccessat2 的仿真曾导致找不到 docker-proxy 的假错误。
-原生 nftables 容器转发尚未验证。此前已修复 64GB 真机：p27 挂载 /opt/docker，迁移原 Docker 数据，p26 启用 512MiB swap；未挂载 p27 复用、重复执行和 fstab 重新激活 swap 均通过，原 26 个 GPT 条目未变。64GB/128GB 稀疏镜像验证实际 ARM64 sgdisk 算法，128GB 尚未真机测试。用户已烧录 10-30 镜像并实测 OAF 与 IPv4 NSS 加速共存；10-31 内置 OAF 的新镜像尚未烧录。
-新的 /data + bind 布局已通过逻辑回归和临时容器真实绑定检查；真机升级后的清理与挂载尚未验证。本次尚未实际运行 GitHub Actions。
+原生 nftables 容器转发尚未验证。此前已修复 64GB 真机：p27 挂载 /opt/docker，迁移原 Docker 数据，p26 启用 512MiB swap；未挂载 p27 复用、重复执行和 fstab 重新激活 swap 均通过，原 26 个 GPT 条目未变。64GB/128GB 稀疏镜像验证实际 ARM64 sgdisk 算法，128GB 尚未真机测试。用户此前已实测 OAF 与 IPv4 NSS 加速共存。
+用户现已烧录 10-31 最新固件：LuCI 旧失效挂载条目消失，mountinfo 输出 179:27 / /data 和 179:27 /docker /opt/docker，确认新的子目录绑定正确。旧根 Docker 删除与已有 /data/docker 保留已通过回归检查，未分别进行真机数据场景验证。本轮尚未实际运行 GitHub Actions。
 
 artifacts/、.local/ 和缓存不提交；不要将旧诊断模块或临时测试服务放入固件。
 简短历史与故障定位见 docs/DEBUG_NOTES.md、docs/WIFI-NSS.md、docs/NSS-L2TP.md。

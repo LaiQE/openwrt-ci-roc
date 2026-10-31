@@ -100,10 +100,8 @@ Windows PowerShell，在仓库根目录执行：
 ```
 
 默认容器 `openwrt-arthur-libwrt-builder`，卷 `openwrt-arthur-libwrt-work`。
-2026-10-30 本轮改用新环境；操作本轮构建时给上述命令追加
-`-Container openwrt-arthur-libwrt-20261030-builder -Volume openwrt-arthur-libwrt-20261030-work`。
-2026-10-31 内置 OAF、`/data` 与 Docker 绑定挂载的最新构建使用
-`-Container openwrt-arthur-libwrt-20261031-builder -Volume openwrt-arthur-libwrt-20261031-work`。
+2026-10-31 本轮完成后，已清理本项目编译容器、构建数据卷和专用镜像；
+已导出的固件、日志、源码版本记录与真机备份保留。下次本地构建会重新创建环境。
 首次创建容器可加 `-RebuildImage` 重新拉取基础系统并跳过镜像层缓存；它不会清空已有卷。
 源码、工具链、下载和缓存位于 Linux 数据卷中，以普通用户编译，容器使用 `--init`。
 每次复制完整输入快照，包含文件删除；同一源码基线可以续编。
@@ -124,7 +122,8 @@ NSS feed 为 `880c1d8`，内核仍为 **6.12.112**；原作者 OAF 为 7.0.2，�
 最新 NSS feed 的 expectation callback 补丁需要补齐 chain notifier 编译条件，详见 [调试记录](docs/DEBUG_NOTES.md)；没有改动 IPv6 加速逻辑。
 已直接从最终 sysupgrade 的 squashfs 核对 `/data` 初始化、绑定恢复、旧 Docker 数据清理、启动保护及四项 OAF 默认值。
 原作者基础特征库未改动；导出后的全部 SHA-256 已复核，新固件位于 `artifacts/20261031-data/`。
-Docker 默认关闭、自动分区/swap、ULA、页脚及其他既有定制继续保留；新的挂载方案待用户手动烧录验证，尚未实际运行 GitHub Actions。
+Docker 默认关闭、自动分区/swap、ULA、页脚及其他既有定制继续保留。
+用户已烧录本轮固件，并通过真机 mountinfo 确认 `/data` 和 Docker 子目录绑定正确；本轮尚未实际运行 GitHub Actions。
 
 ## 磁盘与维护
 
@@ -140,7 +139,9 @@ Docker 默认关闭、自动分区/swap、ULA、页脚及其他既有定制继�
 - 不覆盖挂载路径下尚未清理的 overlay 文件，路径非空时停止并留待手动处理；失败返回非零，保留初始化脚本供重试。磁盘初始化和绑定挂载独立于 Docker 自启开关。
 
 旧版直接挂载 `/opt/docker` 的方案已在 64GB 真机验证；64GB/128GB 稀疏镜像验证了分区算法，原有 26 个 GPT 条目保持不变，128GB 尚未真机测试。
-新的 `/data` + bind 方案已通过隔离逻辑回归及临时容器中的真实绑定挂载检查，升级后的自动清理与挂载仍待用户在真机验证。
+新的 `/data` + bind 方案已通过隔离逻辑回归及临时容器中的真实绑定挂载检查。
+用户升级后确认旧失效挂载条目已消失，真机 mountinfo 为 `179:27 / /data` 和 `179:27 /docker /opt/docker`，绑定正确。
+旧 Docker 数据清理及已有 `/data/docker` 保留由回归检查覆盖，尚未分别进行真机数据场景验证。
 实机备份保存在本机已忽略的 `.local/arthur-storage-backup/`；仍应在刷机前备份磁盘数据。
 隔离逻辑检查：`python3 tests/storage/checks.py`（需要 Bash）。
 真实绑定检查：`tests/storage/bind-checks.py`，需在独立挂载命名空间或临时容器中提供 `CAP_SYS_ADMIN`；仅使用临时 tmpfs，不操作真实磁盘。
