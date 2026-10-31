@@ -26,7 +26,8 @@ required = {
     'kmod-usb3', 'kmod-usb-dwc3', 'kmod-usb-dwc3-qcom', 'kmod-usb-storage',
     'kmod-usb-storage-uas', 'kmod-qca-nss-drv', 'kmod-qca-nss-dp',
     'kmod-qca-nss-ecm', 'kmod-qca-nss-crypto', 'kmod-qca-mcs', 'kmod-nss-ifb',
-    'nssinfo', 'automount',
+    'nssinfo', 'automount', 'luci-app-oaf', 'appfilter', 'kmod-oaf',
+    'luci-i18n-oaf-zh-cn',
     'git', 'git-http', 'git-lfs', 'vim', 'zsh', 'screen', 'dmesg', 'cfdisk',
     'gdisk', 'tune2fs', 'net-tools-netstat', 'net-tools-route', 'zoneinfo-asia',
 }
@@ -37,10 +38,9 @@ required.update('kmod-qca-nss-drv-' + name for name in managers)
 assert not required - packages.keys(), sorted(required - packages.keys())
 for name in packages:
     assert name not in {'luci-app-ddns', 'vlmcsd', 'luci-app-vlmcsd',
-                        'mwan3', 'luci-app-mwan3', 'luci-app-oaf',
-                        'luci-app-appfilter', 'appfilter', 'open-app-filter', 'kmod-oaf'}, name
+                        'mwan3', 'luci-app-mwan3',
+                        'luci-app-appfilter', 'open-app-filter'}, name
     assert not name.startswith(('ddns-scripts', 'luci-i18n-vlmcsd-')), name
-    assert not name.startswith('luci-i18n-oaf-'), name
     assert (not name.startswith('luci-i18n-ddns-') or
             name.startswith('luci-i18n-ddns-go-')), name
 for name in ('kmod-qca-nss-drv', 'kmod-qca-nss-drv-l2tpv2',
@@ -82,6 +82,11 @@ for setting in ("option interval '600'", "option name 'Windows 10'",
     assert setting in text, setting
 for service in ('S95srun-autologin', 'S99homebox'):
     assert (root / 'etc/rc.d' / service).is_symlink(), service
+assert (root / 'etc/rc.d/S96appfilter').is_symlink(), 'OAF management backend not enabled'
+assert list((root / 'lib/modules').rglob('oaf.ko*')), 'OAF module missing'
+assert (root / 'etc/fwxd/feature.bin').is_file()
+assert (root / 'usr/lib/lua/luci/controller/oaf.lua').is_file()
+assert "option tcp_rst '0'" in (root / 'etc/config/fwx').read_text()
 
 lua = root / 'usr/lib/lua/luci'
 controller = (lua / 'controller/dockerman.lua').read_text()
@@ -138,6 +143,6 @@ assert (root / 'etc/modules.d/ath11k').read_text().split() == [
 
 print(f'Firmware checks passed: {len(packages)} packages, Arthur only, SHA-256, '
       'NSS 11.4 managers, requested removals, nftables Lua Docker, integrated Argon, '
-      'VPN menu, restored tools, offline SRun defaults and Wi-Fi NSS policy')
+      'VPN menu, restored tools, offline SRun defaults, built-in OAF and Wi-Fi NSS policy')
 for path in images:
     print(f'{path.name}: {path.stat().st_size} bytes')

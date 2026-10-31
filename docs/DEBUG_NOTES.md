@@ -64,6 +64,18 @@
 - 17:48 完整构建及分区、网络、固件检查通过，退出码 0；内核 6.12.112，仍内置 480 个包。factory 为 165054682 字节，sysupgrade 为 164618513 字节。修复源在最终公钥下对两个站实际 apk update 均通过；最终 squashfs 复核源条目及 OAF 缺席。
 - OAF 独立归档包含 5 个 APK（7.0.2 核心、6.12.112 模块、LuCI、中文、SQLite），签名验证及同轮固件数据库模拟安装通过；包内 SHA-256、导出固件/归档 SHA-256 均核对。本轮未刷机、未在路由器上安装实验包，运行兼容性不作保证。
 
+## 2026-10-31：OAF 内置与 NSS 运行设置
+
+- 用户安装独立 APK 后，菜单缺失最终确认为浏览器缓存；特征库在线更新显示成功但应用目录不变时，实机没有加载 oaf 模块，/proc/sys/fwx 不存在。重启后用户反馈 OAF 恢复正常。
+- 用户在 LuCI 手动开启了软件/硬件 Flow Offloading，运行值为 1/1，而构建默认值是 0/0。根据 NSS 上游说明，改为 LuCI「网络 → 防火墙 → 流量卸载类型：无」；README 增加界面操作与 special 加速统计的判断方法。
+- 随后的 IPv4 直连测试中，special 接收字节在 10 秒内增加约 624MB，确认实际 NSS 加速；IPv6 加速仍为 0，用户明确停止这部分排查，不据此更换 NSS 驱动或固件。
+- 用户要求正式内置 OAF，并选择保留管理后台自启、仅默认关闭功能。luci-app-oaf/appfilter/kmod-oaf 改为 y；TCP 重置、应用过滤、上网控制、上网审计的 UCI 模板和缺失配置回退均改为 0，其他来源默认值保留。新增 prepare-oaf.py，停止导出独立实验归档。
+- 临时 ARM64 固件副本验证通过：四项默认值为 0，启动仍注册 oafd/rule_manager，删除配置后回退为 0，用户手动启用后重启不覆盖。检查接入本地及 Actions，最终镜像仍须通过同样验证。
+- LibWrt 跟踪分支已推进至 96a0ec8，因此新建 openwrt-arthur-libwrt-20261031-builder / openwrt-arthur-libwrt-20261031-work；仅复用带构建哈希校验的下载缓存，源码、工具链及构建目录重新生成。
+- 16:15 首轮完整编译退出 2：最新 NSS feed 880c1d8 的 0028 补丁新增 ecm_conntrack_exp_event，但 LibWrt 开启 CONFIG_NF_CONNTRACK_CHAIN_EVENTS，回调未使用，被 -Werror=unused-function 拒绝。仅将新增函数的编译条件加上 !defined(CONFIG_NF_CONNTRACK_CHAIN_EVENTS)，与原有使用条件一致；不关闭编译错误检查，不改运行加速逻辑。
+- ECM 包清理后单独重建通过，再完成整轮编译：16:29 最终退出码 0，内置 485 个包，内核仍为 6.12.112。分区、ARM64 首次启动网络、OAF 默认值/回退/保留和固件检查均通过。
+- 最终 sysupgrade 的 squashfs 已复核：四项 OAF 开关均为 0，管理后台 S96appfilter、oafd、oaf.ko 及 LuCI 已装入，APK 源条目保持修复；基础特征库与原作者源码一致。factory 为 166219498 字节，sysupgrade 为 165796113 字节，导出至 artifacts/20261031-oaf/ 后全部 SHA-256 一致；新镜像尚未烧录，Actions 尚未实际运行。
+
 来源：
 [LibWrt Wi-Fi 说明](https://github.com/LiBwrt/LibWrt/issues/167)、
 [Argon 弹窗修复](https://github.com/jerrykuku/luci-theme-argon/commit/1055e79)、

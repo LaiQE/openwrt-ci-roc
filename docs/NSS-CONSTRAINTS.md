@@ -58,7 +58,7 @@ VLAN 限制针对上述桥过滤方式，不代表所有 802.1Q VLAN 都不能�
 - 当前源码的 [hnat.sh](https://github.com/destan19/OpenAppFilter/blob/0814b87f57181ef238b9a21604c999e98de73cf2/open-app-filter/files/hnat.sh#L13-L26) 在用户选择禁用加速时，将 ECM 的 `accel_delay_pkts` 提高到 1000000；这是延迟进入 NSS 加速的措施，不是让已加速流量接受完整 DPI。
 - 上游默认 `disable_hnat=0`，并非装入 OAF 就一定关闭 NSS。但保留 NSS 与保证 OAF 对所有流量可靠识别、过滤，不能据此视为已兼容。
 
-本项目保留 NSS，不内置 OAF 核心、模块及 LuCI。按用户后续明确授权，另外将原作者上游编成独立实验 APK，供手动安装验证；这不表示已确认兼容，见 [实验包说明](OAF-EXPERIMENT.md)。此结论针对当前检查到的实现，不宣称所有未来版本都无法兼容。
+2026-10-31 用户实测 OAF 运行时 IPv4 NSS 加速有效，并要求正式内置 OAF。默认关闭 TCP 重置、应用过滤、上网控制及上网审计，保留管理后台运行和 NSS 配置；使用方式见 [OAF 说明](OAF.md)。IPv6 NSS 加速未验证通过，用户要求停止排查；这里记录的是当前测试场景，不将其推广为所有流量或规则的验证结论。
 
 ### 其它应用识别/拦截方案
 
@@ -68,7 +68,7 @@ VLAN 限制针对上述桥过滤方式，不代表所有 802.1Q VLAN 都不能�
 - [SecuBox 的 LuCI 模块](https://github.com/CyberMind-FR/secubox-openwrt/blob/master/README.zh.md) 提供 netifyd/nDPId 面板，但面板存在不等于 NSS 流量拦截已适配。
 - [nDPId](https://github.com/utoni/nDPId) 主要提供流量识别和 JSON 事件；仍需拦截策略层及 NSS 路径适配，不能单独当作本项目可用的应用封锁包。
 
-因此没有把这些未确认的方案编成“已兼容”的替代包；本轮独立实验包只包含用户明确要求尝试的 OAF。
+因此没有引入这些未确认的替代工具；当前采用用户已测试并要求内置的原作者 OAF。
 
 ## 来源索引
 

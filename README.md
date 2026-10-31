@@ -13,7 +13,7 @@
 - 路由器管理员和 SRun 不预置用户密码；AdGuard Home 保留其来源默认设置。
 - Docker 在全新刷机或恢复出厂后默认关闭，可在 Dockerman 中手动启动并启用自启；保留升级时已有的明确自启设置。
 - APK 保留可用的通用软件仓库，不生成没有公共索引的 `nss_packages`、`sqm_scripts_nss` 地址；NSS 源码 feed 和内置加速模块保留。
-- 优先保留 NSS：OpenAppFilter 不预装进固件，仅生成原作者上游的独立实验 APK，供用户后续手动验证；[使用与兼容边界](docs/OAF-EXPERIMENT.md)。
+- 内置原作者 OpenAppFilter 和中文 LuCI；默认关闭 TCP 连接重置、应用过滤、上网控制及上网审计，保留管理后台运行，可在界面直接启用；[使用说明](docs/OAF.md)。
 - 编译优化和 nlbwmon 刷新策略跟随上游；不再强制 O3 或 2 秒刷新。
 
 ## 内置功能
@@ -25,6 +25,7 @@
 | DNS 与动态域名 | 完整 Lua AdGuard Home 界面和当前 feeds 核心、DDNS-Go；已按要求移除旧 DDNS 和 vlmcsd/KMS |
 | VPN 与穿透 | WireGuard、ZeroTier、L2TPv2/NSS、FRP 多服务器、asvow 的 Tailscale 界面（上游已位于 VPN 菜单） |
 | 系统与网络 | Argon 主题及配置、WOL+、UPnP、ARP 绑定、在线用户、Homebox、CPU 调频、ttyd、自动重启、IRQ balance、SFTP、zram |
+| 应用控制 | OpenAppFilter（OAF行为管理）、原作者特征库、自定义特征；四项功能默认关闭，NSS 保持启用 |
 | 工具 | Git/Git HTTP/Git LFS、Vim、Zsh、Screen、dmesg、net-tools、亚洲时区数据 |
 | 校园网 | 离线内置 SRun 程序、LuCI 和 procd；默认关闭，账号密码留空；[使用参数](docs/SRUN.md) |
 
@@ -37,6 +38,7 @@
 - **WOL+**：使用支持现代 LuCI 的 sakura-builder1 维护版本。WireGuard 使用最新上游的原生协议与状态页。
 - **Homebox**：使用 jjm2473/openwrt-apps 当前上游配方、服务和默认配置；只补构建所需的 Go 工具路径，不再替换后端或自行重写运行服务。
 - **PassWall**：来自 Openwrt-Passwall 维护仓库；Sing-box 显式启用 QUIC/UTLS/gRPC/WireGuard，提供 TUIC/Hysteria2 支持，另内置独立 Hysteria2 核心。
+- **OpenAppFilter**：来自 [destan19/OpenAppFilter](https://github.com/destan19/OpenAppFilter) master，内置配套 LuCI、服务、内核模块及中文。只调整上述四项功能的首次默认值，配置缺失时的回退值保持一致；保留管理后台自启和用户后续主动启用的设置，不改特征库或 NSS 驱动。
 
 Go、Tailscale、FRP、Docker 配套组件及 Compose 的版本覆盖和官方源码 SHA-256 记录在
 `configs/package-updates.json`。实际主仓库、feeds 和第三方提交随本地产物导出。
@@ -48,6 +50,33 @@ Go、Tailscale、FRP、Docker 配套组件及 Compose 的版本覆盖和官方�
 测试 NSS 时先通过有线配置 **WPA2-PSK/CCMP**，2.4GHz 20MHz，5GHz 80MHz/20dBm。
 使用 11.4 是为兼容 Mesh NSS；驱动及客户端由上游配方自动选择配套版本。
 上游标为 BROKEN 或不适用于亚瑟的 NSS 模块不强行启用。
+
+### LuCI 中的流量卸载设置
+
+**使用 NSS 时，在 LuCI「网络 → 防火墙」中，将「流量卸载类型」选择为「无」，然后保存并应用。**
+不要选择软件流量卸载或硬件流量卸载；这两项是 OpenWrt 自带的 Flow Offloading，
+与 NSS 是不同机制。**这里选择「无」不会关闭 NSS**，NSS 仍由驱动和 ECM 处理加速。
+[NSS 上游说明](https://github.com/qosmio/openwrt-ipq/blob/main-nss/README.md#1-packet-steering--flow-offloading)
+要求关闭其它流量卸载及 Packet Steering（数据包分流）；数据包分流也应保持关闭。
+
+可以通过 SSH 核对保存后的两个流量卸载开关，均应输出 `0`：
+
+```sh
+uci -q get 'firewall.@defaults[0].flow_offloading'
+uci -q get 'firewall.@defaults[0].flow_offloading_hw'
+```
+
+应用设置后，停止原下载并重新发起连接。从电脑或手机关闭 VPN 和系统代理，使用直连大文件下载验证，
+在下载前后多次读取统计。例如验证 IPv6：
+
+```sh
+cat /sys/kernel/debug/ecm/ecm_nss_ipv6/accelerated_count
+grep -E 'ipv6_(rx|tx)_(pkts|bytes).*special' /sys/kernel/debug/qca-nss-drv/stats/ipv6
+```
+
+加速连接数大于 `0`，且 `special` 字节计数随下载明显增长，才说明存在实际的 NSS 加速流量；
+仅有模块加载、Wi-Fi 的 `nss_offload=1`，或 `common` 计数增长，都不足以证明该下载已被加速。
+IPv4 测试将上述路径和字段中的 `ipv6` 换为 `ipv4`。OAF 与 NSS 同时运行时，也按此方式验证实际流量。
 
 用户已烧录第一版 LibWrt 镜像并反馈基本使用无大问题；各加速路径、吞吐和长期稳定性
 仍以真机统计为准。NSS 不会自动加速 PassWall、Tailscale 等程序的用户态加密。
@@ -73,6 +102,8 @@ Windows PowerShell，在仓库根目录执行：
 默认容器 `openwrt-arthur-libwrt-builder`，卷 `openwrt-arthur-libwrt-work`。
 2026-10-30 本轮改用新环境；操作本轮构建时给上述命令追加
 `-Container openwrt-arthur-libwrt-20261030-builder -Volume openwrt-arthur-libwrt-20261030-work`。
+2026-10-31 内置 OAF 的最新构建使用
+`-Container openwrt-arthur-libwrt-20261031-builder -Volume openwrt-arthur-libwrt-20261031-work`。
 首次创建容器可加 `-RebuildImage` 重新拉取基础系统并跳过镜像层缓存；它不会清空已有卷。
 源码、工具链、下载和缓存位于 Linux 数据卷中，以普通用户编译，容器使用 `--init`。
 每次复制完整输入快照，包含文件删除；同一源码基线可以续编。
@@ -82,20 +113,18 @@ Windows PowerShell，在仓库根目录执行：
 源码提交和日志。构建会核对显式配置、首次启动 LAN/DHCP、磁盘初始化保护逻辑，以及必要包和正确版本的初始化脚本是否实际装入。
 按用户要求不再进行 AdGuard Home 专项或本地主题界面测试。
 
-`Arthur.OAF-experimental.tar.gz` 为另行生成的 OpenAppFilter 实验包，包含 LuCI、核心、
-同轮内核模块、中文翻译（若生成）及固件未内置的必要依赖，并附包信息和 SHA-256。
-它们没有安装进固件；只能配合同一轮新固件手动实验，不能将“编译成功”视为已兼容 NSS。
-安装和验证方法见 [实验包说明](docs/OAF-EXPERIMENT.md)。
+OpenAppFilter 已改为内置，停止生成独立实验归档。全新刷机或恢复出厂后，四项功能开关均为关闭，
+管理后台仍自启以提供 LuCI 配置；保留配置升级时尊重用户已有的启用状态。
+本地与 Actions 都检查包列表、真实 ARM64 启动脚本的默认值、配置缺失回退和手动启用后的保留行为。
+用户已实测 OAF 运行时 IPv4 NSS 加速有效；IPv6 NSS 加速仍未验证通过，按要求停止排查，不为此更换驱动。
 
-2026-10-30 17:48 的 Podman 构建及上述校验全部通过，最终退出码 0；
-仅生成亚瑟 factory/sysupgrade 镜像，内置 480 个包。导出后的镜像 SHA-256 已复核。
-源码更新至 `a151272`，内核为 **6.12.112**。调整后的仓库列表已使用最终固件公钥，
-分别对 ImmortalWrt 下载站及 vsean 镜像执行隔离的 `apk update`，均成功。
-原生 nftables Docker、Lua 界面、默认关闭、亚瑟自动分区/挂载与 swap 修复、ULA 和页脚调整均已编入。
-编译出的引擎在隔离 chroot 中通过配置校验；容器实际转发尚待验证。
-已从最终 sysupgrade 的 squashfs 核对修复后的软件源条目；本轮新镜像待用户烧录验证。
-OAF 归档含 5 个独立签名 APK，已通过公钥验证和同轮固件数据库上的模拟安装；
-最终镜像中确认没有 OAF 服务、模块及 LuCI，实际 NSS/DPI 兼容性留待用户手动实验。
+2026-10-31 16:29 的完整 Podman 构建及上述校验全部通过，最终退出码 0；
+仅生成亚瑟 factory/sysupgrade 镜像，内置 **485 个包**。LibWrt 源码为 `96a0ec8`，
+NSS feed 为 `880c1d8`，内核仍为 **6.12.112**；原作者 OAF 为 7.0.2，默认值定制包修订号为 r2。
+最新 NSS feed 的 expectation callback 补丁需要补齐 chain notifier 编译条件，详见 [调试记录](docs/DEBUG_NOTES.md)；没有改动 IPv6 加速逻辑。
+已直接从最终 sysupgrade 的 squashfs 核对四项 OAF 默认值、后台启动入口、内核模块及修复后的 APK 源。
+原作者基础特征库未改动；导出后的全部 SHA-256 已复核，新固件位于 `artifacts/20261031-oaf/`。
+Docker 默认关闭、自动分区/swap、ULA、页脚及其他既有定制继续保留；本轮新镜像待用户手动烧录，尚未实际运行 GitHub Actions。
 
 ## 磁盘与维护
 

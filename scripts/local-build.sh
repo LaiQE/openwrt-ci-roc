@@ -42,7 +42,7 @@ prepare() {
         find "$WORKSPACE/configs" "$WORKSPACE/files" "$WORKSPACE/package" \
             -type f -print0 | sort -z | xargs -0 sha256sum
         sha256sum "$WORKSPACE/scripts/Arthur-script.sh" "$WORKSPACE/scripts/apply-package-updates.py" \
-            "$WORKSPACE/scripts/prepare-docker-nft.py"
+            "$WORKSPACE/scripts/prepare-docker-nft.py" "$WORKSPACE/scripts/prepare-oaf.py"
     } | sha256sum | cut -d' ' -f1)"
     if [ ! -f .prepared ] || [ "$(cat .prepared)" != "$fingerprint" ]; then
         # These feeds are unrelated to the router profile. Keep NSS feeds intact.
@@ -87,9 +87,8 @@ case "$STAGE" in
         python3 "$WORKSPACE/tests/storage/checks.py"
         python3 "$WORKSPACE/tests/network/first-boot-checks.py" \
             "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
-        python3 "$WORKSPACE/scripts/export-oaf-packages.py" "$OPENWRT_PATH" \
-            "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
-            "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"
+        python3 "$WORKSPACE/tests/oaf/checks.py" \
+            "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax
         python3 "$WORKSPACE/tests/firmware/checks.py" \
             "$OPENWRT_PATH"/build_dir/target-*/root-qualcommax \
             "$OPENWRT_PATH/bin/targets/qualcommax/ipq60xx"

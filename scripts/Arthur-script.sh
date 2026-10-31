@@ -213,11 +213,23 @@ if package_enabled luci-app-tailscale; then
   sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d' feeds/packages/net/tailscale/Makefile
 fi
 if package_enabled luci-app-oaf appfilter kmod-oaf; then
-  # Build the original author's matching UI, daemon and kernel module as APKs.
-  # The Arthur seed selects them as modules, never as firmware defaults.
+  # Keep the original author's matching UI, daemon and kernel module together.
   rm -rf feeds/luci/applications/luci-app-appfilter feeds/packages/net/open-app-filter
   clone_repository https://github.com/destan19/OpenAppFilter master package/OpenAppFilter
+  python3 "$WORKSPACE/scripts/prepare-oaf.py" package/OpenAppFilter
 fi
+# NSS-LibWrt's expectation callback is unused with LibWrt's chain notifier.
+# Match its declaration guard to the existing non-chain notifier assignment.
+python3 - <<'PY'
+from pathlib import Path
+path = Path('feeds/nss_packages/qca-nss-ecm/patches/0028-ecm_conntrack_notifier-add-exp_event-callback.patch')
+if path.exists():
+    text = path.read_text()
+    before = '+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))\n+/*\n+ * ecm_conntrack_exp_event()'
+    after = '+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)) && !defined(CONFIG_NF_CONNTRACK_CHAIN_EVENTS)\n+/*\n+ * ecm_conntrack_exp_event()'
+    assert text.count(before) + text.count(after) == 1, 'Review upstream ECM expectation callback guard'
+    path.write_text(text.replace(before, after))
+PY
 if package_enabled luci-theme-argon; then
   rm -rf feeds/luci/themes/luci-theme-argon feeds/luci/applications/luci-app-argon-config
   clone_repository https://github.com/jerrykuku/luci-theme-argon master package/luci-theme-argon
